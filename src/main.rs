@@ -17,7 +17,9 @@ mod small_indices;
 mod solve;
 
 fn main() -> Result<()> {
-    env_logger::init_from_env(env_logger::Env::new().filter_or("FINDMINHS_LOG", "info"));
+    env_logger::from_env(env_logger::Env::new().filter_or("FINDMINHS_LOG", "info"))
+        .format_timestamp_millis()
+        .init();
 
     let args: Vec<_> = env::args().collect();
     if args.len() != 2 {

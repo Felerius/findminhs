@@ -49,7 +49,12 @@ fn prune_redundant_nodes(instance: &mut Instance) -> usize {
         }
 
         if log_enabled!(Debug) && (idx + 1) % 1000 == 0 {
-            debug!("Pruning nodes: {}/{}", idx + 1, nodes.len());
+            debug!(
+                "Pruning nodes: {}/{} ({} kept)",
+                idx + 1,
+                nodes.len(),
+                num_kept
+            );
         }
     }
     nodes.len() - num_kept
@@ -78,7 +83,12 @@ fn prune_redundant_edges(instance: &mut Instance) -> usize {
         }
 
         if log_enabled!(Debug) && (idx + 1) % 1000 == 0 {
-            debug!("Pruning edges: {}/{}", idx + 1, edges.len());
+            debug!(
+                "Pruning edges: {}/{} ({} kept)",
+                idx + 1,
+                edges.len(),
+                num_kept
+            );
         }
     }
     edges.len() - num_kept

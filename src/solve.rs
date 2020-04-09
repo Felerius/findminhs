@@ -1,17 +1,28 @@
 use crate::activity::Activities;
 use crate::instance::{Instance, NodeIdx};
 use anyhow::Result;
-use log::{debug, trace};
+use log::{debug, info, trace};
 use rand::{Rng, SeedableRng};
+use std::time::Instant;
 
+#[derive(Debug, Clone, Default)]
+struct Stats {
+    iterations: usize,
+    node_deletions: usize,
+    edge_deletions: usize,
+}
+
+#[derive(Debug, Clone)]
 struct State<R: Rng> {
     rng: R,
     incomplete_hs: Vec<NodeIdx>,
     best_known: usize,
     activities: Activities<R>,
+    stats: Stats,
 }
 
 fn greedy_approx(instance: &mut Instance) -> usize {
+    let time_start = Instant::now();
     let mut hs = vec![];
     while !instance.edges().is_empty() {
         let mut max_degree = (0, NodeIdx::INVALID);
@@ -26,7 +37,12 @@ fn greedy_approx(instance: &mut Instance) -> usize {
         instance.restore_incident_edges(node);
         instance.restore_node(node);
     }
-    debug!("Greedy hs of size {}: {:?}", hs.len(), hs);
+    debug!(
+        "Greedy hs of size {}: {:?} ({:.2?})",
+        hs.len(),
+        hs,
+        Instant::now() - time_start
+    );
     hs.len()
 }
 
@@ -39,6 +55,10 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
         );
         state.best_known = state.incomplete_hs.len();
     }
+    // Don't count the last iteration where we find a new best HS, since they
+    // are comparatively very cheap
+    state.stats.iterations += 1;
+
     if state.incomplete_hs.len() + 1 >= state.best_known || instance.nodes().is_empty() {
         for &node in &state.incomplete_hs {
             state.activities.boost_activity(node, 1.0);
@@ -46,9 +66,10 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
         return;
     }
 
-    // use rand::seq::SliceRandom;
-    // let node = *instance.nodes().choose(&mut state.rng).unwrap();  // unwrap is safe due to the check above
     let node = state.activities.highest();
+    state.stats.node_deletions += 1;
+    state.stats.edge_deletions += instance.node_degree(node);
+
     trace!("Branching on {}", node);
     if state.rng.gen() {
         instance.delete_node(node);
@@ -85,7 +106,18 @@ pub fn solve(instance: &mut Instance, mut rng: impl Rng + SeedableRng) -> Result
         incomplete_hs: vec![],
         best_known: approx,
         activities,
+        stats: Stats::default(),
     };
+    let time_start = Instant::now();
     solve_recursive(instance, &mut state);
+    info!(
+        "Recursive solving took {} iterations ({:.2?})",
+        state.stats.iterations,
+        Instant::now() - time_start
+    );
+    info!(
+        "Deleted/restored {} nodes and {} edges while solving",
+        state.stats.node_deletions, state.stats.edge_deletions
+    );
     Ok(state.best_known)
 }

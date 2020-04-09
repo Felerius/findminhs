@@ -74,6 +74,7 @@ impl<T> SkipVec<T> {
     /// This can corrupt the list if the item was already deleted.
     pub fn delete(&mut self, index: usize) {
         let Entry { prev, next, .. } = self.entries[index];
+        self.len -= 1;
         if prev == EntryIdx::INVALID {
             debug_assert_eq!(self.first, EntryIdx::from(index));
             self.first = next;
@@ -97,6 +98,7 @@ impl<T> SkipVec<T> {
     /// the results will be unpredictable (but still memory-safe).
     pub fn restore(&mut self, index: usize) {
         let Entry { prev, next, .. } = self.entries[index];
+        self.len += 1;
         if prev == EntryIdx::INVALID {
             debug_assert_eq!(self.first, next);
             self.first = EntryIdx::from(index);

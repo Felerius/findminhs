@@ -6,6 +6,7 @@ use rand::{Rng, SeedableRng};
 use std::cmp::Ordering;
 use std::hint::unreachable_unchecked;
 
+#[derive(Debug, Clone)]
 struct ActivitySegTreeOp<R>(R);
 
 /// Activities which differ by less than this are considered equal
@@ -74,6 +75,7 @@ impl<R: Rng> SegTreeOp for ActivitySegTreeOp<R> {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Activities<R: Rng> {
     activities: SegTree<ActivitySegTreeOp<R>>,
 }
