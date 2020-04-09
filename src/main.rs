@@ -1,3 +1,5 @@
+#![warn(clippy::all, clippy::pedantic)]
+#![allow(clippy::similar_names, clippy::cast_possible_truncation)]
 use crate::instance::Instance;
 use anyhow::Result;
 use log::info;

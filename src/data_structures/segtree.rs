@@ -27,7 +27,7 @@ impl<O: SegTreeOp> SegTree<O> {
 
     fn push(&mut self, index: usize) {
         let len = self.lazy.len();
-        let height = 32 - (len as u32).leading_zeros();
+        let height = 64 - (len as u64).leading_zeros();
         for shift in (1..=height).rev() {
             let idx = index >> shift;
             if idx == 0 {

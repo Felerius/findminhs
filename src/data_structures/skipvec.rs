@@ -1,4 +1,5 @@
 use crate::create_idx_struct;
+use std::convert::TryFrom;
 use std::fmt::{self, Debug, Formatter};
 use std::iter::{self, FromIterator, FusedIterator};
 use std::ops::{Index, IndexMut};
@@ -138,8 +139,7 @@ impl<T> FromIterator<T> for SkipVec<T> {
             .map(|(index, value)| Entry {
                 prev: index
                     .checked_sub(1)
-                    .map(EntryIdx::from)
-                    .unwrap_or(EntryIdx::INVALID),
+                    .map_or(EntryIdx::INVALID, EntryIdx::from),
                 next: EntryIdx::from(index + 1),
                 value,
             })
@@ -147,6 +147,10 @@ impl<T> FromIterator<T> for SkipVec<T> {
         if let Some(entry) = vec.last_mut() {
             entry.next = EntryIdx::INVALID;
         }
+        debug_assert!(
+            u32::try_from(vec.len()).is_ok(),
+            "SkipVec size must fit a u32"
+        );
         let len = vec.len() as u32;
         let (first, last) = if vec.is_empty() {
             (EntryIdx::INVALID, EntryIdx::INVALID)

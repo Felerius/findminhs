@@ -24,7 +24,7 @@ impl Instance {
         let mut line = String::new();
 
         reader.read_line(&mut line)?;
-        let mut numbers = line.split_ascii_whitespace().map(|str| str.parse());
+        let mut numbers = line.split_ascii_whitespace().map(str::parse);
         let num_nodes = numbers
             .next()
             .ok_or_else(|| anyhow!("Missing node count"))??;
@@ -43,7 +43,7 @@ impl Instance {
         for _ in 0..num_edges {
             line.clear();
             reader.read_line(&mut line)?;
-            let mut numbers = line.split_ascii_whitespace().map(|str| str.parse());
+            let mut numbers = line.split_ascii_whitespace().map(str::parse);
             let degree = numbers
                 .next()
                 .ok_or_else(|| anyhow!("empty edge line in input, expected degree"))??;

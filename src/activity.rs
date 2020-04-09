@@ -9,7 +9,7 @@ use std::hint::unreachable_unchecked;
 struct ActivitySegTreeOp<R>(R);
 
 /// Activities which differ by less than this are considered equal
-const ACTIVITY_EQ_EPSILON: f32 = 0.000001;
+const ACTIVITY_EQ_EPSILON: f32 = 0.000_001;
 
 /// Factor by which activities are decayed.
 const ACTIVITY_DECAY_FACTOR: f32 = 0.99;
