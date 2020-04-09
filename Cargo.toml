@@ -4,11 +4,8 @@ version = "0.1.0"
 authors = ["David Stangl <david.stangl@student.hpi.de>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 anyhow = "1.0"
-derivative = "2.1"
 env_logger = "0.7"
 log = { version = "0.4", features = ["max_level_debug", "release_max_level_info"] }
 #log = { version = "0.4", features = ["release_max_level_debug"] }

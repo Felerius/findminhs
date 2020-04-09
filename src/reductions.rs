@@ -108,11 +108,13 @@ pub fn prune(instance: &mut Instance) {
         }
     }
     info!(
-        "Pruned {} nodes, {} edges in {} iterations ({:.2?})",
+        "Pruned {} nodes, {} edges in {} iterations ({:.2?}), remaining: {} nodes, {} edges",
         pruned_nodes,
         pruned_edges,
         current_iter,
-        Instant::now() - time_start
+        Instant::now() - time_start,
+        instance.num_nodes(),
+        instance.num_edges(),
     );
 }
 

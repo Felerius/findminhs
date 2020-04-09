@@ -66,10 +66,11 @@ impl Instance {
                     .map(move |(index, _value)| (edge_idx, EntryIdx::from(index)))
             })
             .collect();
-        all_incidences.sort_unstable_by_key(|(edge_idx, entry_idx)| {
-            // Sort secondarily by edge idx, so that the incidence vectors end
-            // up sorted by increasing edge idx
-            (edge_incidences[edge_idx.idx()][entry_idx.idx()], *edge_idx)
+        // Due to the double indirection, caching the key here is a bit faster
+        // (and a lot faster than unstable sorts). Using a stable sort allows
+        // us to avoid using the edge index as a secondary sort criteria.
+        all_incidences.sort_by_cached_key(|(edge_idx, entry_idx)| {
+            edge_incidences[edge_idx.idx()][entry_idx.idx()]
         });
 
         let mut node_incidences = Vec::with_capacity(num_nodes);
@@ -86,7 +87,7 @@ impl Instance {
             // Patterns cannot be combined until https://github.com/rust-lang/rust/issues/68354
             // is stable
             for (rem_incidences_pair, incidences_pair) in
-            rem_incidences[..degree].iter().zip(&mut incidences)
+                rem_incidences[..degree].iter().zip(&mut incidences)
             {
                 let (edge_idx, edge_entry_idx) = rem_incidences_pair;
                 let (node_entry_idx, node_entry) = incidences_pair;
@@ -112,16 +113,23 @@ impl Instance {
         })
     }
 
-    /// Degree of a node
-    pub fn degree(&self, node_idx: NodeIdx) -> usize {
-        self.node_incidences[node_idx.idx()].len()
+    pub fn num_nodes(&self) -> usize {
+        self.nodes.len()
+    }
+
+    pub fn num_edges(&self) -> usize {
+        self.edges.len()
+    }
+
+    pub fn num_nodes_total(&self) -> usize {
+        self.node_incidences.len()
     }
 
     /// Edges incident to a node, sorted by increasing indices.
     pub fn node<'a>(
         &'a self,
         node_idx: NodeIdx,
-    ) -> impl Iterator<Item=EdgeIdx> + ExactSizeIterator + 'a {
+    ) -> impl Iterator<Item = EdgeIdx> + ExactSizeIterator + 'a {
         self.node_incidences[node_idx.idx()]
             .iter()
             .map(|(_, (edge_idx, _))| *edge_idx)
@@ -131,7 +139,7 @@ impl Instance {
     pub fn edge<'a>(
         &'a self,
         edge_idx: EdgeIdx,
-    ) -> impl Iterator<Item=NodeIdx> + ExactSizeIterator + 'a {
+    ) -> impl Iterator<Item = NodeIdx> + ExactSizeIterator + 'a {
         self.edge_incidences[edge_idx.idx()]
             .iter()
             .map(|(_, (node_idx, _))| *node_idx)
@@ -140,6 +148,10 @@ impl Instance {
     /// Alive nodes in the instance, in arbitrary order.
     pub fn nodes(&self) -> &[NodeIdx] {
         &self.nodes
+    }
+
+    pub fn is_node_deleted(&self, node_idx: NodeIdx) -> bool {
+        self.nodes.is_deleted(node_idx.idx())
     }
 
     /// Alive edges in the instance, in arbitrary order.
@@ -209,7 +221,10 @@ impl Instance {
         // slower than unsafe alternatives, since an incidence list is only
         // 28 bytes large.
         trace!("Deleting all edges incident to {}", node_idx);
-        debug_assert!(self.nodes.is_deleted(node_idx.idx()), "Node passed to delete_incident_edges must be deleted");
+        debug_assert!(
+            self.nodes.is_deleted(node_idx.idx()),
+            "Node passed to delete_incident_edges must be deleted"
+        );
         let incidence = mem::take(&mut self.node_incidences[node_idx.idx()]);
         for (_, (edge_idx, _)) in &incidence {
             self.delete_edge(*edge_idx);
@@ -224,7 +239,10 @@ impl Instance {
     /// In particular, the node itself must still be deleted.
     pub fn restore_incident_edges(&mut self, node_idx: NodeIdx) {
         trace!("Restoring all edges incident to {}", node_idx);
-        debug_assert!(self.nodes.is_deleted(node_idx.idx()), "Node passed to restore_incident_edges must be deleted");
+        debug_assert!(
+            self.nodes.is_deleted(node_idx.idx()),
+            "Node passed to restore_incident_edges must be deleted"
+        );
 
         // See `delete_incident_edges` for an explanation of this swapping around
         let incidence = mem::take(&mut self.node_incidences[node_idx.idx()]);

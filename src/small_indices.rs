@@ -44,5 +44,11 @@ macro_rules! create_idx_struct {
                 write!(f, "{}", self.0)
             }
         }
+
+        impl ::std::default::Default for $name {
+            fn default() -> Self {
+                Self::INVALID
+            }
+        }
     };
 }

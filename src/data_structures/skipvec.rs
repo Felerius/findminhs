@@ -198,7 +198,12 @@ impl<'a, T> IntoIterator for &'a mut SkipVec<T> {
         let front = self.first;
         let back = self.last;
         let rem_len = self.len;
-        IterMut { list: self, front, back, rem_len }
+        IterMut {
+            list: self,
+            front,
+            back,
+            rem_len,
+        }
     }
 }
 

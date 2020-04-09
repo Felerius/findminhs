@@ -1,10 +1,13 @@
 use crate::instance::Instance;
 use anyhow::Result;
-use std::{env, process};
-use std::io::BufReader;
+use log::info;
+use rand::rngs::OsRng;
+use rand::{Rng, SeedableRng};
 use std::fs::File;
-use rand::SeedableRng;
+use std::io::BufReader;
+use std::{env, process};
 
+mod activity;
 mod data_structures;
 mod instance;
 mod reductions;
@@ -23,8 +26,12 @@ fn main() -> Result<()> {
     let file = BufReader::new(File::open(&args[1])?);
     let mut instance = Instance::load(file)?;
     reductions::prune(&mut instance);
-    let rng = rand_pcg::Pcg64Mcg::seed_from_u64(13201512356123065126);
-    solve::solve(&mut instance, rng);
+
+    let seed: u64 = OsRng.gen();
+    info!("RNG seed: {}", seed);
+    let rng = rand_pcg::Pcg64Mcg::seed_from_u64(seed);
+    let smallest_size = solve::solve(&mut instance, rng)?;
+    info!("Smallest HS: {}", smallest_size);
 
     Ok(())
 }
