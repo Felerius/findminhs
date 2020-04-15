@@ -1,15 +1,15 @@
 use crate::activity::Activities;
 use crate::instance::{Instance, NodeIdx};
 use anyhow::Result;
-use log::{debug, info, trace};
+use log::{debug, info, log_enabled, trace, Level};
 use rand::{Rng, SeedableRng};
 use std::time::Instant;
 
 #[derive(Debug, Clone, Default)]
-struct Stats {
-    iterations: usize,
-    node_deletions: usize,
-    edge_deletions: usize,
+pub struct Stats {
+    pub iterations: usize,
+    pub node_deletions: usize,
+    pub edge_deletions: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -19,6 +19,13 @@ struct State<R: Rng> {
     best_known: usize,
     activities: Activities<R>,
     stats: Stats,
+}
+
+#[derive(Debug, Clone)]
+pub struct SolveResult {
+    pub hs_size: usize,
+    pub solve_time: f64,
+    pub stats: Stats,
 }
 
 fn greedy_approx(instance: &mut Instance) -> usize {
@@ -59,6 +66,13 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
     // are comparatively very cheap
     state.stats.iterations += 1;
 
+    if log_enabled!(Level::Debug) && (state.stats.iterations + 1) % 10_000_000 == 0 {
+        debug!(
+            "Still solving (iterations: {}M)...",
+            (state.stats.iterations + 1) / 1_000_000
+        );
+    }
+
     if state.incomplete_hs.len() + 1 >= state.best_known || instance.nodes().is_empty() {
         for &node in &state.incomplete_hs {
             state.activities.boost_activity(node, 1.0);
@@ -98,7 +112,7 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
     state.activities.decay_all();
 }
 
-pub fn solve(instance: &mut Instance, mut rng: impl Rng + SeedableRng) -> Result<usize> {
+pub fn solve(instance: &mut Instance, mut rng: impl Rng + SeedableRng) -> Result<SolveResult> {
     let approx = greedy_approx(instance);
     let activities = Activities::new(instance, &mut rng)?;
     let mut state = State {
@@ -110,14 +124,14 @@ pub fn solve(instance: &mut Instance, mut rng: impl Rng + SeedableRng) -> Result
     };
     let time_start = Instant::now();
     solve_recursive(instance, &mut state);
+    let solve_time = Instant::now() - time_start;
     info!(
         "Recursive solving took {} iterations ({:.2?})",
-        state.stats.iterations,
-        Instant::now() - time_start
+        state.stats.iterations, solve_time
     );
-    info!(
-        "Deleted/restored {} nodes and {} edges while solving",
-        state.stats.node_deletions, state.stats.edge_deletions
-    );
-    Ok(state.best_known)
+    Ok(SolveResult {
+        hs_size: state.best_known,
+        solve_time: solve_time.as_secs_f64(),
+        stats: state.stats,
+    })
 }

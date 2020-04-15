@@ -1,5 +1,5 @@
 use crate::instance::Instance;
-use log::{debug, info, log_enabled, trace, Level::Debug};
+use log::{debug, info, log_enabled, trace, Level};
 use std::cmp::Reverse;
 use std::time::Instant;
 
@@ -48,7 +48,7 @@ fn prune_redundant_nodes(instance: &mut Instance) -> usize {
             num_kept += 1;
         }
 
-        if log_enabled!(Debug) && (idx + 1) % 1000 == 0 {
+        if log_enabled!(Level::Debug) && (idx + 1) % 1000 == 0 {
             debug!(
                 "Pruning nodes: {}/{} ({} kept)",
                 idx + 1,
@@ -82,7 +82,7 @@ fn prune_redundant_edges(instance: &mut Instance) -> usize {
             num_kept += 1;
         }
 
-        if log_enabled!(Debug) && (idx + 1) % 1000 == 0 {
+        if log_enabled!(Level::Debug) && (idx + 1) % 1000 == 0 {
             debug!(
                 "Pruning edges: {}/{} ({} kept)",
                 idx + 1,
