@@ -1,7 +1,38 @@
-use crate::instance::Instance;
-use log::{debug, info, log_enabled, trace, Level};
+use crate::instance::{EdgeIdx, Instance, NodeIdx};
+use log::{debug, log_enabled, trace, Level};
 use std::cmp::Reverse;
 use std::time::Instant;
+
+#[derive(Debug)]
+enum ReducedItem {
+    Node(NodeIdx),
+    Edge(EdgeIdx),
+}
+
+#[derive(Debug, Default)]
+pub struct Reduction {
+    reduced: Vec<ReducedItem>,
+}
+
+impl Reduction {
+    pub fn nodes(&self) -> impl Iterator<Item=NodeIdx> + '_ {
+        self.reduced.iter().filter_map(|item| {
+            match item {
+                ReducedItem::Node(node_idx) => Some(*node_idx),
+                ReducedItem::Edge(_) => None,
+            }
+        })
+    }
+
+    pub fn restore(&self, instance: &mut Instance) {
+        for item in self.reduced.iter().rev() {
+            match item {
+                ReducedItem::Node(node_idx) => instance.restore_node(*node_idx),
+                ReducedItem::Edge(edge_idx) => instance.restore_edge(*edge_idx),
+            }
+        }
+    }
+}
 
 fn is_subset_or_equal<T, I1, I2>(left: I1, right: I2) -> bool
 where
@@ -26,7 +57,7 @@ where
     true
 }
 
-fn prune_redundant_nodes(instance: &mut Instance) -> usize {
+fn prune_redundant_nodes(instance: &mut Instance, reduction: &mut Reduction) -> usize {
     let mut nodes = instance.nodes().to_vec();
     nodes.sort_unstable_by_key(|&node| Reverse(instance.node_degree(node)));
 
@@ -43,6 +74,7 @@ fn prune_redundant_nodes(instance: &mut Instance) -> usize {
         }
         if prunable {
             instance.delete_node(node);
+            reduction.reduced.push(ReducedItem::Node(node));
         } else {
             nodes.swap(num_kept, idx);
             num_kept += 1;
@@ -60,7 +92,7 @@ fn prune_redundant_nodes(instance: &mut Instance) -> usize {
     nodes.len() - num_kept
 }
 
-fn prune_redundant_edges(instance: &mut Instance) -> usize {
+fn prune_redundant_edges(instance: &mut Instance, reduction: &mut Reduction) -> usize {
     let mut edges = instance.edges().to_vec();
     edges.sort_unstable_by_key(|&edge| instance.edge_degree(edge));
 
@@ -77,6 +109,7 @@ fn prune_redundant_edges(instance: &mut Instance) -> usize {
         }
         if prunable {
             instance.delete_edge(edge);
+            reduction.reduced.push(ReducedItem::Edge(edge));
         } else {
             edges.swap(num_kept, idx);
             num_kept += 1;
@@ -94,17 +127,18 @@ fn prune_redundant_edges(instance: &mut Instance) -> usize {
     edges.len() - num_kept
 }
 
-pub fn prune(instance: &mut Instance) {
+pub fn prune(instance: &mut Instance) -> Reduction {
     let time_start = Instant::now();
+    let mut reduction = Reduction::default();
     let mut pruned_nodes = 0;
     let mut pruned_edges = 0;
     let mut current_iter = 0;
     loop {
         current_iter += 1;
         let time_start_iteration = Instant::now();
-        let iter_pruned_nodes = prune_redundant_nodes(instance);
-        let iter_pruned_edges = prune_redundant_edges(instance);
-        debug!(
+        let iter_pruned_nodes = prune_redundant_nodes(instance, &mut reduction);
+        let iter_pruned_edges = prune_redundant_edges(instance, &mut reduction);
+        trace!(
             "Iteration {}: pruned {} nodes, {} edges in {:.2?}",
             current_iter,
             iter_pruned_nodes,
@@ -117,7 +151,7 @@ pub fn prune(instance: &mut Instance) {
             break;
         }
     }
-    info!(
+    debug!(
         "Pruned {} nodes, {} edges in {} iterations ({:.2?}), remaining: {} nodes, {} edges",
         pruned_nodes,
         pruned_edges,
@@ -126,6 +160,7 @@ pub fn prune(instance: &mut Instance) {
         instance.num_nodes(),
         instance.num_edges(),
     );
+    reduction
 }
 
 #[cfg(test)]

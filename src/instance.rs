@@ -191,7 +191,7 @@ impl Instance {
     /// the corresponding deletions to produce sensible results.
     pub fn restore_node(&mut self, node_idx: NodeIdx) {
         trace!("Restoring node {}", node_idx);
-        for (_idx, (edge_idx, entry_idx)) in &self.node_incidences[node_idx.idx()] {
+        for (_idx, (edge_idx, entry_idx)) in self.node_incidences[node_idx.idx()].iter().rev() {
             self.edge_incidences[edge_idx.idx()].restore(entry_idx.idx());
         }
         self.nodes.restore(node_idx.idx());
@@ -203,7 +203,7 @@ impl Instance {
     /// the corresponding deletions to produce sensible results.
     pub fn restore_edge(&mut self, edge_idx: EdgeIdx) {
         trace!("Restoring edge {}", edge_idx);
-        for (_idx, (node_idx, entry_idx)) in &self.edge_incidences[edge_idx.idx()] {
+        for (_idx, (node_idx, entry_idx)) in self.edge_incidences[edge_idx.idx()].iter().rev() {
             self.node_incidences[node_idx.idx()].restore(entry_idx.idx());
         }
         self.edges.restore(edge_idx.idx());

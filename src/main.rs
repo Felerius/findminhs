@@ -12,7 +12,6 @@ use std::ffi::OsStr;
 use std::fs::{File, OpenOptions};
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
 use structopt::StructOpt;
 
 mod activity;
@@ -40,36 +39,24 @@ struct CsvRecord {
     file_name: String,
     seed: u64,
     hs_size: usize,
-    initial_reduction_time: f64,
     solve_time: f64,
     iterations: usize,
-    node_deletions: usize,
-    edge_deletions: usize,
 }
 
 impl CsvRecord {
-    fn new(
-        input_file: impl AsRef<Path>,
-        seed: u64,
-        initial_reduction_time: Duration,
-        results: SolveResult,
-    ) -> Result<Self> {
+    fn new(input_file: impl AsRef<Path>, seed: u64, results: &SolveResult) -> Result<Self> {
         let file_name = input_file
             .as_ref()
             .file_name()
             .and_then(OsStr::to_str)
             .ok_or_else(|| anyhow!("File name can't be extracted"))?
             .to_string();
-        let initial_reduction_time = initial_reduction_time.as_secs_f64();
         Ok(Self {
             file_name,
             seed,
             hs_size: results.hs_size,
-            initial_reduction_time,
-            solve_time: results.solve_time + initial_reduction_time,
+            solve_time: results.solve_time,
             iterations: results.stats.iterations,
-            node_deletions: results.stats.node_deletions,
-            edge_deletions: results.stats.edge_deletions,
         })
     }
 }
@@ -84,9 +71,6 @@ fn main() -> Result<()> {
 
     let file = BufReader::new(File::open(&opts.input_file)?);
     let mut instance = Instance::load(file)?;
-    let before_reducing = Instant::now();
-    reductions::prune(&mut instance);
-    let initial_reduction_time = Instant::now() - before_reducing;
 
     let seed: u64 = OsRng.gen();
     info!("RNG seed: {}", seed);
@@ -103,12 +87,7 @@ fn main() -> Result<()> {
         let mut writer = WriterBuilder::new()
             .has_headers(write_header)
             .from_writer(file);
-        writer.serialize(CsvRecord::new(
-            &opts.input_file,
-            seed,
-            initial_reduction_time,
-            results,
-        )?)?;
+        writer.serialize(CsvRecord::new(&opts.input_file, seed, &results)?)?;
     }
 
     Ok(())

@@ -1,5 +1,7 @@
 use crate::activity::Activities;
 use crate::instance::{Instance, NodeIdx};
+use crate::reductions;
+use crate::reductions::Reduction;
 use anyhow::Result;
 use log::{debug, info, log_enabled, trace, Level};
 use rand::{Rng, SeedableRng};
@@ -8,8 +10,6 @@ use std::time::Instant;
 #[derive(Debug, Clone, Default)]
 pub struct Stats {
     pub iterations: usize,
-    pub node_deletions: usize,
-    pub edge_deletions: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -22,6 +22,7 @@ struct State<R: Rng> {
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::module_name_repetitions)]
 pub struct SolveResult {
     pub hs_size: usize,
     pub solve_time: f64,
@@ -66,7 +67,18 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
     // are comparatively very cheap
     state.stats.iterations += 1;
 
-    if log_enabled!(Level::Debug) && (state.stats.iterations + 1) % 10_000_000 == 0 {
+    // Don't prune on the first iteration, we already do it before calculating
+    // the greedy approximation
+    let reduction = if state.stats.iterations > 1 {
+        reductions::prune(instance)
+    } else {
+        Reduction::default()
+    };
+    for node in reduction.nodes() {
+        state.activities.delete(node);
+    }
+
+    if log_enabled!(Level::Debug) && (state.stats.iterations + 1) % 1_000_000 == 0 {
         debug!(
             "Still solving (iterations: {}M)...",
             (state.stats.iterations + 1) / 1_000_000
@@ -77,42 +89,44 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
         for &node in &state.incomplete_hs {
             state.activities.boost_activity(node, 1.0);
         }
-        return;
-    }
-
-    let node = state.activities.highest();
-    state.stats.node_deletions += 1;
-    state.stats.edge_deletions += instance.node_degree(node);
-
-    trace!("Branching on {}", node);
-    if state.rng.gen() {
-        instance.delete_node(node);
-        state.activities.delete(node);
-        solve_recursive(instance, state);
-        instance.delete_incident_edges(node);
-        state.incomplete_hs.push(node);
-        solve_recursive(instance, state);
-        state.incomplete_hs.pop();
-        instance.restore_incident_edges(node);
-        instance.restore_node(node);
-        state.activities.restore(node);
     } else {
-        instance.delete_node(node);
-        state.activities.delete(node);
-        instance.delete_incident_edges(node);
-        state.incomplete_hs.push(node);
-        solve_recursive(instance, state);
-        state.incomplete_hs.pop();
-        instance.restore_incident_edges(node);
-        solve_recursive(instance, state);
-        instance.restore_node(node);
-        state.activities.restore(node);
+        let node = state.activities.highest();
+        trace!("Branching on {}", node);
+        if state.rng.gen() {
+            instance.delete_node(node);
+            state.activities.delete(node);
+            solve_recursive(instance, state);
+            instance.delete_incident_edges(node);
+            state.incomplete_hs.push(node);
+            solve_recursive(instance, state);
+            state.incomplete_hs.pop();
+            instance.restore_incident_edges(node);
+            instance.restore_node(node);
+            state.activities.restore(node);
+        } else {
+            instance.delete_node(node);
+            state.activities.delete(node);
+            instance.delete_incident_edges(node);
+            state.incomplete_hs.push(node);
+            solve_recursive(instance, state);
+            state.incomplete_hs.pop();
+            instance.restore_incident_edges(node);
+            solve_recursive(instance, state);
+            instance.restore_node(node);
+            state.activities.restore(node);
+        }
     }
 
     state.activities.decay_all();
+    reduction.restore(instance);
+    for node in reduction.nodes() {
+        state.activities.restore(node);
+    }
 }
 
 pub fn solve(instance: &mut Instance, mut rng: impl Rng + SeedableRng) -> Result<SolveResult> {
+    let time_start = Instant::now();
+    reductions::prune(instance);
     let approx = greedy_approx(instance);
     let activities = Activities::new(instance, &mut rng)?;
     let mut state = State {
@@ -122,11 +136,10 @@ pub fn solve(instance: &mut Instance, mut rng: impl Rng + SeedableRng) -> Result
         activities,
         stats: Stats::default(),
     };
-    let time_start = Instant::now();
     solve_recursive(instance, &mut state);
     let solve_time = Instant::now() - time_start;
     info!(
-        "Recursive solving took {} iterations ({:.2?})",
+        "Solving took {} iterations ({:.2?})",
         state.stats.iterations, solve_time
     );
     Ok(SolveResult {

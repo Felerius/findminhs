@@ -19,13 +19,17 @@ pub struct SkipVec<T> {
     first: EntryIdx,
     last: EntryIdx,
     len: u32,
+    #[cfg(feature = "debug-skipvec")]
+    deletions: Vec<EntryIdx>,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct Entry<T> {
     prev: EntryIdx,
     next: EntryIdx,
     value: T,
+    #[cfg(feature = "debug-skipvec")]
+    deleted: bool,
 }
 
 /// Iterator over a `ArrayLinkedList<T>`.
@@ -49,6 +53,37 @@ pub struct IterMut<'a, T> {
 create_idx_struct!(EntryIdx);
 
 impl<T> SkipVec<T> {
+    #[cfg(feature = "debug-skipvec")]
+    fn check_invariants(&self) {
+        let mut idx = self.first;
+        while idx != EntryIdx::INVALID {
+            let next = self.entries[idx.idx()].next;
+            if next != EntryIdx::INVALID {
+                let prev_of_next = self.entries[next.idx()].prev;
+                debug_assert_eq!(
+                    idx, prev_of_next,
+                    "Invariant violated: next of {} is {}, but prev of {} is {}",
+                    idx, next, next, prev_of_next
+                );
+            }
+            idx = next;
+        }
+        if self.first != EntryIdx::INVALID {
+            debug_assert_eq!(
+                self.entries[self.first.idx()].prev,
+                EntryIdx::INVALID,
+                "Invariant violated: prev of first is not invalid",
+            );
+        }
+        if self.last != EntryIdx::INVALID {
+            debug_assert_eq!(
+                self.entries[self.last.idx()].next,
+                EntryIdx::INVALID,
+                "Invariant violated: next of last is not invalid",
+            );
+        }
+    }
+
     pub fn with_len(len: usize, item: T) -> Self
     where
         T: Clone,
@@ -73,6 +108,10 @@ impl<T> SkipVec<T> {
     ///
     /// This can corrupt the list if the item was already deleted.
     pub fn delete(&mut self, index: usize) {
+        #[cfg(feature = "debug-skipvec")] {
+            debug_assert!(!self.entries[index].deleted, "Entry {} already deleted", index);
+            self.entries[index].deleted = true;
+        }
         let Entry { prev, next, .. } = self.entries[index];
         self.len -= 1;
         if prev == EntryIdx::INVALID {
@@ -89,6 +128,10 @@ impl<T> SkipVec<T> {
             debug_assert_eq!(self.entries[next.idx()].prev, EntryIdx::from(index));
             self.entries[next.idx()].prev = prev;
         }
+        #[cfg(feature = "debug-skipvec")] {
+            self.deletions.push(EntryIdx::from(index));
+            self.check_invariants();
+        }
     }
 
     /// Restore a deleted item.
@@ -97,6 +140,18 @@ impl<T> SkipVec<T> {
     /// done in the reverse order of the corresponding deletions. Otherwise,
     /// the results will be unpredictable (but still memory-safe).
     pub fn restore(&mut self, index: usize) {
+        #[cfg(feature = "debug-skipvec")] {
+            let popped = self.deletions.pop();
+            debug_assert_eq!(
+                popped,
+                Some(EntryIdx::from(index)),
+                "Restorations out-of-order: expected {:?} next, but got {}",
+                popped,
+                index
+            );
+            debug_assert!(self.entries[index].deleted, "Entry {} already restored", index);
+            self.entries[index].deleted = false;
+        }
         let Entry { prev, next, .. } = self.entries[index];
         self.len += 1;
         if prev == EntryIdx::INVALID {
@@ -112,6 +167,9 @@ impl<T> SkipVec<T> {
         } else {
             debug_assert_eq!(self.entries[next.idx()].prev, prev);
             self.entries[next.idx()].prev = EntryIdx::from(index);
+        }
+        #[cfg(feature = "debug-skipvec")] {
+            self.check_invariants();
         }
     }
 }
@@ -129,6 +187,8 @@ impl<T> Default for SkipVec<T> {
             first: EntryIdx::INVALID,
             last: EntryIdx::INVALID,
             len: 0,
+            #[cfg(feature = "debug-skipvec")]
+            deletions: vec![],
         }
     }
 }
@@ -144,6 +204,8 @@ impl<T> FromIterator<T> for SkipVec<T> {
                     .map_or(EntryIdx::INVALID, EntryIdx::from),
                 next: EntryIdx::from(index + 1),
                 value,
+                #[cfg(feature = "debug-skipvec")]
+                deleted: false,
             })
             .collect();
         if let Some(entry) = vec.last_mut() {
@@ -159,12 +221,18 @@ impl<T> FromIterator<T> for SkipVec<T> {
         } else {
             (EntryIdx(0), EntryIdx(len - 1))
         };
-        Self {
+        let instance = Self {
             entries: vec.into_boxed_slice(),
             first,
             last,
             len,
+            #[cfg(feature = "debug-skipvec")]
+            deletions: vec![],
+        };
+        #[cfg(feature = "debug-skipvec")] {
+            instance.check_invariants();
         }
+        instance
     }
 }
 
