@@ -15,12 +15,10 @@ pub struct Reduction {
 }
 
 impl Reduction {
-    pub fn nodes(&self) -> impl Iterator<Item=NodeIdx> + '_ {
-        self.reduced.iter().filter_map(|item| {
-            match item {
-                ReducedItem::Node(node_idx) => Some(*node_idx),
-                ReducedItem::Edge(_) => None,
-            }
+    pub fn nodes(&self) -> impl Iterator<Item = NodeIdx> + '_ {
+        self.reduced.iter().filter_map(|item| match item {
+            ReducedItem::Node(node_idx) => Some(*node_idx),
+            ReducedItem::Edge(_) => None,
         })
     }
 

@@ -108,8 +108,13 @@ impl<T> SkipVec<T> {
     ///
     /// This can corrupt the list if the item was already deleted.
     pub fn delete(&mut self, index: usize) {
-        #[cfg(feature = "debug-skipvec")] {
-            debug_assert!(!self.entries[index].deleted, "Entry {} already deleted", index);
+        #[cfg(feature = "debug-skipvec")]
+        {
+            debug_assert!(
+                !self.entries[index].deleted,
+                "Entry {} already deleted",
+                index
+            );
             self.entries[index].deleted = true;
         }
         let Entry { prev, next, .. } = self.entries[index];
@@ -128,7 +133,8 @@ impl<T> SkipVec<T> {
             debug_assert_eq!(self.entries[next.idx()].prev, EntryIdx::from(index));
             self.entries[next.idx()].prev = prev;
         }
-        #[cfg(feature = "debug-skipvec")] {
+        #[cfg(feature = "debug-skipvec")]
+        {
             self.deletions.push(EntryIdx::from(index));
             self.check_invariants();
         }
@@ -140,7 +146,8 @@ impl<T> SkipVec<T> {
     /// done in the reverse order of the corresponding deletions. Otherwise,
     /// the results will be unpredictable (but still memory-safe).
     pub fn restore(&mut self, index: usize) {
-        #[cfg(feature = "debug-skipvec")] {
+        #[cfg(feature = "debug-skipvec")]
+        {
             let popped = self.deletions.pop();
             debug_assert_eq!(
                 popped,
@@ -149,7 +156,11 @@ impl<T> SkipVec<T> {
                 popped,
                 index
             );
-            debug_assert!(self.entries[index].deleted, "Entry {} already restored", index);
+            debug_assert!(
+                self.entries[index].deleted,
+                "Entry {} already restored",
+                index
+            );
             self.entries[index].deleted = false;
         }
         let Entry { prev, next, .. } = self.entries[index];
@@ -168,7 +179,8 @@ impl<T> SkipVec<T> {
             debug_assert_eq!(self.entries[next.idx()].prev, prev);
             self.entries[next.idx()].prev = EntryIdx::from(index);
         }
-        #[cfg(feature = "debug-skipvec")] {
+        #[cfg(feature = "debug-skipvec")]
+        {
             self.check_invariants();
         }
     }
@@ -221,6 +233,7 @@ impl<T> FromIterator<T> for SkipVec<T> {
         } else {
             (EntryIdx(0), EntryIdx(len - 1))
         };
+        #[cfg_attr(not(feature = "debug-skipvec"), allow(clippy::let_and_return))]
         let instance = Self {
             entries: vec.into_boxed_slice(),
             first,
@@ -229,7 +242,8 @@ impl<T> FromIterator<T> for SkipVec<T> {
             #[cfg(feature = "debug-skipvec")]
             deletions: vec![],
         };
-        #[cfg(feature = "debug-skipvec")] {
+        #[cfg(feature = "debug-skipvec")]
+        {
             instance.check_invariants();
         }
         instance

@@ -6,14 +6,32 @@ use rand::{Rng, SeedableRng};
 use std::cmp::Ordering;
 use std::hint::unreachable_unchecked;
 
-#[derive(Debug, Clone)]
-struct ActivitySegTreeOp<R>(R);
-
 /// Activities which differ by less than this are considered equal
 const ACTIVITY_EQ_EPSILON: f32 = 0.000_001;
 
 /// Factor by which activities are decayed.
 const ACTIVITY_DECAY_FACTOR: f32 = 0.99;
+
+#[derive(Debug)]
+struct ActivitySegTreeOp;
+
+#[derive(Debug, Copy, Clone, Default)]
+struct SegTreeItem {
+    /// Activity of the associated node.
+    activity: f32,
+
+    /// Which node this item belongs to.
+    ///
+    /// This is set to `NodeIdx::INVALID` if the node has been deleted. This
+    /// way a deleted node can still receive activity boosts without being
+    /// considered for the node with the most activity.
+    node_idx: NodeIdx,
+
+    /// Random value used to tiebreak equal activities.
+    ///
+    /// This is rerolled whenever a nodes activity changes.
+    tiebreak: u32,
+}
 
 /// Implements a segment tree for activities.
 ///
@@ -24,30 +42,24 @@ const ACTIVITY_DECAY_FACTOR: f32 = 0.99;
 ///   * Decay all activities by a factor.
 ///   * Add activity to a node.
 /// All operations work in O(log n), where n is the number of nodes.
-impl<R: Rng> SegTreeOp for ActivitySegTreeOp<R> {
-    /// Contains the activity and the index of the node.
-    ///
-    /// The node index is set to `NodeIdx::INVALID` if the node has been
-    /// deleted. This is respected in `combine` below to make sure that a
-    /// deleted node is never reported as the maximum. At the same time, this
-    /// still allows the node to receive activity boosts/decays just as normal.
-    type Item = (f32, NodeIdx);
+impl SegTreeOp for ActivitySegTreeOp {
+    type Item = SegTreeItem;
     type Lazy = f32;
 
-    fn apply(&mut self, item: &mut Self::Item, lazy: Option<&mut Self::Lazy>, upper: &Self::Lazy) {
-        item.0 *= upper;
+    fn apply(item: &mut Self::Item, lazy: Option<&mut Self::Lazy>, upper: &Self::Lazy) {
+        item.activity *= upper;
         if let Some(lazy) = lazy {
             *lazy *= upper;
         }
     }
 
-    fn combine(&mut self, left: &Self::Item, right: &Self::Item) -> Self::Item {
-        if left.1 == NodeIdx::INVALID {
+    fn combine(left: &Self::Item, right: &Self::Item) -> Self::Item {
+        if left.node_idx == NodeIdx::INVALID {
             *right
-        } else if right.1 == NodeIdx::INVALID {
+        } else if right.node_idx == NodeIdx::INVALID {
             *left
-        } else if (left.0 - right.0).abs() < ACTIVITY_EQ_EPSILON {
-            if self.0.gen() {
+        } else if (left.activity - right.activity).abs() < ACTIVITY_EQ_EPSILON {
+            if left.tiebreak < right.tiebreak {
                 *left
             } else {
                 *right
@@ -56,7 +68,7 @@ impl<R: Rng> SegTreeOp for ActivitySegTreeOp<R> {
             // We only ever add and multiply with constants, so we should never
             // have any NaN's. Check in debug mode, optimize release mode under
             // the above assumption.
-            match left.0.partial_cmp(&right.0) {
+            match left.activity.partial_cmp(&right.activity) {
                 None => {
                     if cfg!(debug) {
                         panic!("Activity value was set to NaN")
@@ -77,7 +89,8 @@ impl<R: Rng> SegTreeOp for ActivitySegTreeOp<R> {
 
 #[derive(Debug, Clone)]
 pub struct Activities<R: Rng> {
-    activities: SegTree<ActivitySegTreeOp<R>>,
+    activities: SegTree<ActivitySegTreeOp>,
+    rng: R,
 }
 
 impl<R: Rng> Activities<R> {
@@ -85,19 +98,23 @@ impl<R: Rng> Activities<R> {
     where
         R: SeedableRng,
     {
-        let op = ActivitySegTreeOp(R::from_rng(seed_rng)?);
-        let num_nodes = instance.num_nodes_total();
-        let activities = SegTree::from_iter(
-            op,
-            (0..num_nodes).map(NodeIdx::from).map(|idx| {
-                if instance.is_node_deleted(idx) {
-                    (0.0, NodeIdx::INVALID)
+        let mut rng = R::from_rng(seed_rng)?;
+        let activities = (0..instance.num_nodes_total())
+            .map(NodeIdx::from)
+            .map(|idx| {
+                let node_idx = if instance.is_node_deleted(idx) {
+                    NodeIdx::INVALID
                 } else {
-                    (0.0, idx)
+                    idx
+                };
+                SegTreeItem {
+                    activity: 0.0,
+                    node_idx,
+                    tiebreak: rng.gen(),
                 }
-            }),
-        );
-        Ok(Self { activities })
+            })
+            .collect();
+        Ok(Self { activities, rng })
     }
 
     pub fn decay_all(&mut self) {
@@ -107,33 +124,36 @@ impl<R: Rng> Activities<R> {
 
     pub fn boost_activity(&mut self, node_idx: NodeIdx, amount: f32) {
         trace!("Boosting {} by {}", node_idx, amount);
-        self.activities
-            .change_single(node_idx.idx(), |entry| entry.0 += amount);
+        let new_tiebreak = self.rng.gen();
+        self.activities.change_single(node_idx.idx(), |item| {
+            item.activity += amount;
+            item.tiebreak = new_tiebreak;
+        });
     }
 
     pub fn delete(&mut self, node_idx: NodeIdx) {
-        self.activities.change_single(node_idx.idx(), |entry| {
+        self.activities.change_single(node_idx.idx(), |item| {
             debug_assert!(
-                entry.1 != NodeIdx::INVALID,
+                item.node_idx != NodeIdx::INVALID,
                 "Node {} was deleted twice",
                 node_idx
             );
-            entry.1 = NodeIdx::INVALID;
+            item.node_idx = NodeIdx::INVALID;
         });
     }
 
     pub fn restore(&mut self, node_idx: NodeIdx) {
-        self.activities.change_single(node_idx.idx(), |entry| {
+        self.activities.change_single(node_idx.idx(), |item| {
             debug_assert!(
-                entry.1 == NodeIdx::INVALID,
+                item.node_idx == NodeIdx::INVALID,
                 "Node {} restored without being deleted",
                 node_idx
             );
-            entry.1 = node_idx;
+            item.node_idx = node_idx;
         });
     }
 
     pub fn highest(&self) -> NodeIdx {
-        self.activities.root().1
+        self.activities.root().node_idx
     }
 }

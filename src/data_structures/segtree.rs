@@ -1,28 +1,30 @@
 use std::fmt::Debug;
+use std::iter::FromIterator;
+use std::mem;
+use derivative::Derivative;
 
 pub trait SegTreeOp {
     type Item;
     type Lazy;
 
-    fn apply(&mut self, item: &mut Self::Item, lazy: Option<&mut Self::Lazy>, upper: &Self::Lazy);
+    fn apply(item: &mut Self::Item, lazy: Option<&mut Self::Lazy>, upper: &Self::Lazy);
 
-    fn combine(&mut self, left: &Self::Item, right: &Self::Item) -> Self::Item;
+    fn combine(left: &Self::Item, right: &Self::Item) -> Self::Item;
 
     fn no_lazy() -> Self::Lazy;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Derivative)]
+#[derivative(Debug(bound="O::Item: Debug, O::Lazy: Debug"))]
+#[derivative(Clone(bound="O::Item: Clone, O::Lazy: Clone"))]
 pub struct SegTree<O: SegTreeOp> {
-    op: O,
     data: Vec<O::Item>,
     lazy: Vec<O::Lazy>,
 }
 
 impl<O: SegTreeOp> SegTree<O> {
     fn recalc_at(&mut self, index: usize) {
-        self.data[index] = self
-            .op
-            .combine(&self.data[2 * index], &self.data[2 * index + 1]);
+        self.data[index] = O::combine(&self.data[2 * index], &self.data[2 * index + 1]);
     }
 
     fn push(&mut self, index: usize) {
@@ -34,10 +36,8 @@ impl<O: SegTreeOp> SegTree<O> {
                 continue;
             }
             let (head, tail) = self.lazy.split_at_mut(idx + 1);
-            self.op
-                .apply(&mut self.data[2 * idx], tail.get_mut(idx - 1), &head[idx]);
-            self.op
-                .apply(&mut self.data[2 * idx + 1], tail.get_mut(idx), &head[idx]);
+            O::apply(&mut self.data[2 * idx], tail.get_mut(idx - 1), &head[idx]);
+            O::apply(&mut self.data[2 * idx + 1], tail.get_mut(idx), &head[idx]);
             head[idx] = O::no_lazy();
         }
     }
@@ -57,29 +57,25 @@ impl<O: SegTreeOp> SegTree<O> {
     }
 
     pub fn apply_to_all(&mut self, lazy: &O::Lazy) {
-        self.op.apply(&mut self.data[1], self.lazy.get_mut(1), lazy);
+        O::apply(&mut self.data[1], self.lazy.get_mut(1), lazy);
     }
 }
 
-impl<O: SegTreeOp> SegTree<O>
-where
-    O::Lazy: Clone,
-{
-    pub fn from_iter<I>(op: O, iter: I) -> Self
-    where
-        I: IntoIterator<Item = O::Item>,
-        I::IntoIter: ExactSizeIterator,
-        O::Item: Default,
-    {
+impl<O: SegTreeOp> FromIterator<O::Item> for SegTree<O> where O::Item: Default {
+    fn from_iter<T: IntoIterator<Item = O::Item>>(iter: T) -> Self {
         let iter = iter.into_iter();
-        let len = iter.len();
+        let mut data: Vec<_> = iter.collect();
+        let len = data.len();
         assert!(len > 0, "SegTree cannot be initialized empty");
-        let mut data = Vec::with_capacity(2 * len);
-        data.resize_with(len, O::Item::default);
-        data.extend(iter);
+        data.reserve_exact(len);
+        for idx in 0..len {
+            let val = mem::take(&mut data[idx]);
+            data.push(val);
+        }
 
-        let lazy = vec![O::no_lazy(); len];
-        let mut tree = SegTree { op, data, lazy };
+        let mut lazy = Vec::with_capacity(len);
+        lazy.resize_with(len, O::no_lazy);
+        let mut tree = SegTree { data, lazy };
         for index in (1..len).rev() {
             tree.recalc_at(index);
         }

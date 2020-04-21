@@ -10,6 +10,7 @@ debug-skipvec = []
 [dependencies]
 anyhow = "1.0"
 csv = "1.1"
+derivative = "2.1"
 env_logger = "0.7"
 #log = { version = "0.4", features = ["max_level_debug", "release_max_level_info"] }
 log = { version = "0.4", features = ["release_max_level_debug"] }
