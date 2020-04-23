@@ -17,7 +17,7 @@ use structopt::StructOpt;
 mod activity;
 mod data_structures;
 mod instance;
-mod reductions;
+mod subsuperset;
 mod small_indices;
 mod solve;
 

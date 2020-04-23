@@ -12,6 +12,11 @@ macro_rules! create_idx_struct {
             pub fn idx(&self) -> usize {
                 self.0 as usize
             }
+
+            #[allow(dead_code)]
+            pub fn valid(&self) -> bool {
+                *self != Self::INVALID
+            }
         }
 
         impl ::std::convert::From<usize> for $name {

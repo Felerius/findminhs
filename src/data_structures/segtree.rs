@@ -1,7 +1,7 @@
+use derivative::Derivative;
 use std::fmt::Debug;
 use std::iter::FromIterator;
 use std::mem;
-use derivative::Derivative;
 
 pub trait SegTreeOp {
     type Item;
@@ -15,8 +15,8 @@ pub trait SegTreeOp {
 }
 
 #[derive(Derivative)]
-#[derivative(Debug(bound="O::Item: Debug, O::Lazy: Debug"))]
-#[derivative(Clone(bound="O::Item: Clone, O::Lazy: Clone"))]
+#[derivative(Debug(bound = "O::Item: Debug, O::Lazy: Debug"))]
+#[derivative(Clone(bound = "O::Item: Clone, O::Lazy: Clone"))]
 pub struct SegTree<O: SegTreeOp> {
     data: Vec<O::Item>,
     lazy: Vec<O::Lazy>,
@@ -61,7 +61,10 @@ impl<O: SegTreeOp> SegTree<O> {
     }
 }
 
-impl<O: SegTreeOp> FromIterator<O::Item> for SegTree<O> where O::Item: Default {
+impl<O: SegTreeOp> FromIterator<O::Item> for SegTree<O>
+where
+    O::Item: Default,
+{
     fn from_iter<T: IntoIterator<Item = O::Item>>(iter: T) -> Self {
         let iter = iter.into_iter();
         let mut data: Vec<_> = iter.collect();

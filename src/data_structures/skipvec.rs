@@ -56,9 +56,9 @@ impl<T> SkipVec<T> {
     #[cfg(feature = "debug-skipvec")]
     fn check_invariants(&self) {
         let mut idx = self.first;
-        while idx != EntryIdx::INVALID {
+        while idx.valid() {
             let next = self.entries[idx.idx()].next;
-            if next != EntryIdx::INVALID {
+            if next.valid() {
                 let prev_of_next = self.entries[next.idx()].prev;
                 debug_assert_eq!(
                     idx, prev_of_next,
@@ -68,14 +68,14 @@ impl<T> SkipVec<T> {
             }
             idx = next;
         }
-        if self.first != EntryIdx::INVALID {
+        if self.first.valid() {
             debug_assert_eq!(
                 self.entries[self.first.idx()].prev,
                 EntryIdx::INVALID,
                 "Invariant violated: prev of first is not invalid",
             );
         }
-        if self.last != EntryIdx::INVALID {
+        if self.last.valid() {
             debug_assert_eq!(
                 self.entries[self.last.idx()].next,
                 EntryIdx::INVALID,
@@ -119,19 +119,19 @@ impl<T> SkipVec<T> {
         }
         let Entry { prev, next, .. } = self.entries[index];
         self.len -= 1;
-        if prev == EntryIdx::INVALID {
-            debug_assert_eq!(self.first, EntryIdx::from(index));
-            self.first = next;
-        } else {
+        if prev.valid() {
             debug_assert_eq!(self.entries[prev.idx()].next, EntryIdx::from(index));
             self.entries[prev.idx()].next = next;
-        }
-        if next == EntryIdx::INVALID {
-            debug_assert_eq!(self.last, EntryIdx::from(index));
-            self.last = prev;
         } else {
+            debug_assert_eq!(self.first, EntryIdx::from(index));
+            self.first = next;
+        }
+        if next.valid() {
             debug_assert_eq!(self.entries[next.idx()].prev, EntryIdx::from(index));
             self.entries[next.idx()].prev = prev;
+        } else {
+            debug_assert_eq!(self.last, EntryIdx::from(index));
+            self.last = prev;
         }
         #[cfg(feature = "debug-skipvec")]
         {
@@ -165,19 +165,19 @@ impl<T> SkipVec<T> {
         }
         let Entry { prev, next, .. } = self.entries[index];
         self.len += 1;
-        if prev == EntryIdx::INVALID {
-            debug_assert_eq!(self.first, next);
-            self.first = EntryIdx::from(index);
-        } else {
+        if prev.valid() {
             debug_assert_eq!(self.entries[prev.idx()].next, next);
             self.entries[prev.idx()].next = EntryIdx::from(index);
-        }
-        if next == EntryIdx::INVALID {
-            debug_assert_eq!(self.last, prev);
-            self.last = EntryIdx::from(index);
         } else {
+            debug_assert_eq!(self.first, next);
+            self.first = EntryIdx::from(index);
+        }
+        if next.valid() {
             debug_assert_eq!(self.entries[next.idx()].prev, prev);
             self.entries[next.idx()].prev = EntryIdx::from(index);
+        } else {
+            debug_assert_eq!(self.last, prev);
+            self.last = EntryIdx::from(index);
         }
         #[cfg(feature = "debug-skipvec")]
         {
@@ -299,7 +299,7 @@ impl<'a, T> Iterator for Iter<'a, T> {
     type Item = (usize, &'a T);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.front == EntryIdx::INVALID {
+        if !self.front.valid() {
             return None;
         }
         let index = self.front.idx();
@@ -320,7 +320,7 @@ impl<'a, T> Iterator for Iter<'a, T> {
 
 impl<'a, T> DoubleEndedIterator for Iter<'a, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        if self.front == EntryIdx::INVALID {
+        if !self.front.valid() {
             return None;
         }
         let index = self.back.idx();
@@ -343,7 +343,7 @@ impl<'a, T> Iterator for IterMut<'a, T> {
     type Item = (usize, &'a mut T);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.front == EntryIdx::INVALID {
+        if !self.front.valid() {
             return None;
         }
         let index = self.front.idx();
@@ -365,7 +365,7 @@ impl<'a, T> Iterator for IterMut<'a, T> {
 
 impl<'a, T> DoubleEndedIterator for IterMut<'a, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        if self.front == EntryIdx::INVALID {
+        if !self.front.valid() {
             return None;
         }
         let index = self.back.idx();

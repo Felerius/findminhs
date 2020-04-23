@@ -6,6 +6,7 @@ edition = "2018"
 
 [features]
 debug-skipvec = []
+disable-activity = []
 
 [dependencies]
 anyhow = "1.0"

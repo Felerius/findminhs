@@ -1,5 +1,6 @@
 use crate::create_idx_struct;
 use crate::data_structures::cont_idx_vec::ContiguousIdxVec;
+use crate::data_structures::segtree::{SegTree, SegTreeOp};
 use crate::data_structures::skipvec::SkipVec;
 use anyhow::{anyhow, ensure, Result};
 use log::{info, trace};
@@ -11,11 +12,30 @@ create_idx_struct!(NodeIdx);
 create_idx_struct!(EdgeIdx);
 create_idx_struct!(EntryIdx);
 
+struct EdgeDegreeOp;
+
 pub struct Instance {
     nodes: ContiguousIdxVec<NodeIdx>,
     edges: ContiguousIdxVec<EdgeIdx>,
     node_incidences: Vec<SkipVec<(EdgeIdx, EntryIdx)>>,
     edge_incidences: Vec<SkipVec<(NodeIdx, EntryIdx)>>,
+    edge_degrees: SegTree<EdgeDegreeOp>,
+}
+
+impl SegTreeOp for EdgeDegreeOp {
+    // Track the edge with the maximum degree and an edge with degree 1, if it
+    // exists
+    type Item = (u32, EdgeIdx);
+    type Lazy = ();
+
+    fn apply(_: &mut Self::Item, _: Option<&mut Self::Lazy>, _: &Self::Lazy) {}
+
+    fn combine(left: &Self::Item, right: &Self::Item) -> Self::Item {
+        let deg_1_edge = if left.1.valid() { left.1 } else { right.1 };
+        (left.0.max(right.0), deg_1_edge)
+    }
+
+    fn no_lazy() -> Self::Lazy {}
 }
 
 impl Instance {
@@ -99,6 +119,18 @@ impl Instance {
             rem_incidences = &rem_incidences[degree..];
         }
 
+        let edge_degrees = (0..num_edges)
+            .map(|idx| {
+                let degree = edge_incidences[idx].len() as u32;
+                let deg_1_edge = if degree == 1 {
+                    EdgeIdx::from(idx)
+                } else {
+                    EdgeIdx::INVALID
+                };
+                (degree, deg_1_edge)
+            })
+            .collect();
+
         info!(
             "Loaded instance with {} nodes, {} edges in {:.2?}",
             num_nodes,
@@ -110,6 +142,7 @@ impl Instance {
             edges,
             node_incidences,
             edge_incidences,
+            edge_degrees,
         })
     }
 
@@ -167,11 +200,31 @@ impl Instance {
         self.edge_incidences[edge_idx.idx()].len()
     }
 
+    pub fn max_edge_degree(&self) -> usize {
+        self.edge_degrees.root().0 as usize
+    }
+
+    pub fn degree_1_edge(&self) -> Option<EdgeIdx> {
+        if self.edge_degrees.root().1.valid() {
+            Some(self.edge_degrees.root().1)
+        } else {
+            None
+        }
+    }
+
     /// Deletes a node from the instance.
     pub fn delete_node(&mut self, node_idx: NodeIdx) {
         trace!("Deleting node {}", node_idx);
         for (_idx, (edge_idx, entry_idx)) in &self.node_incidences[node_idx.idx()] {
             self.edge_incidences[edge_idx.idx()].delete(entry_idx.idx());
+            self.edge_degrees.change_single(edge_idx.idx(), |item| {
+                item.0 -= 1;
+                item.1 = if item.0 == 1 {
+                    *edge_idx
+                } else {
+                    EdgeIdx::INVALID
+                };
+            })
         }
         self.nodes.delete(node_idx.idx());
     }
@@ -183,6 +236,8 @@ impl Instance {
             self.node_incidences[node_idx.idx()].delete(entry_idx.idx());
         }
         self.edges.delete(edge_idx.idx());
+        self.edge_degrees
+            .change_single(edge_idx.idx(), |item| *item = (0, EdgeIdx::INVALID))
     }
 
     /// Restores a previously deleted node.
@@ -193,6 +248,14 @@ impl Instance {
         trace!("Restoring node {}", node_idx);
         for (_idx, (edge_idx, entry_idx)) in self.node_incidences[node_idx.idx()].iter().rev() {
             self.edge_incidences[edge_idx.idx()].restore(entry_idx.idx());
+            self.edge_degrees.change_single(edge_idx.idx(), |item| {
+                item.0 += 1;
+                item.1 = if item.0 == 1 {
+                    *edge_idx
+                } else {
+                    EdgeIdx::INVALID
+                };
+            })
         }
         self.nodes.restore(node_idx.idx());
     }
@@ -207,6 +270,15 @@ impl Instance {
             self.node_incidences[node_idx.idx()].restore(entry_idx.idx());
         }
         self.edges.restore(edge_idx.idx());
+        let degree = self.edge_degree(edge_idx) as u32;
+        self.edge_degrees.change_single(edge_idx.idx(), |item| {
+            item.0 = degree;
+            item.1 = if degree == 1 {
+                edge_idx
+            } else {
+                EdgeIdx::INVALID
+            };
+        })
     }
 
     /// Deletes all edges incident to a node.

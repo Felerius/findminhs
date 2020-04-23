@@ -54,9 +54,9 @@ impl SegTreeOp for ActivitySegTreeOp {
     }
 
     fn combine(left: &Self::Item, right: &Self::Item) -> Self::Item {
-        if left.node_idx == NodeIdx::INVALID {
+        if !left.node_idx.valid() {
             *right
-        } else if right.node_idx == NodeIdx::INVALID {
+        } else if !right.node_idx.valid() {
             *left
         } else if (left.activity - right.activity).abs() < ACTIVITY_EQ_EPSILON {
             if left.tiebreak < right.tiebreak {
@@ -133,11 +133,7 @@ impl<R: Rng> Activities<R> {
 
     pub fn delete(&mut self, node_idx: NodeIdx) {
         self.activities.change_single(node_idx.idx(), |item| {
-            debug_assert!(
-                item.node_idx != NodeIdx::INVALID,
-                "Node {} was deleted twice",
-                node_idx
-            );
+            debug_assert!(item.node_idx.valid(), "Node {} was deleted twice", node_idx);
             item.node_idx = NodeIdx::INVALID;
         });
     }
@@ -145,7 +141,7 @@ impl<R: Rng> Activities<R> {
     pub fn restore(&mut self, node_idx: NodeIdx) {
         self.activities.change_single(node_idx.idx(), |item| {
             debug_assert!(
-                item.node_idx == NodeIdx::INVALID,
+                !item.node_idx.valid(),
                 "Node {} restored without being deleted",
                 node_idx
             );
