@@ -17,9 +17,9 @@ use structopt::StructOpt;
 mod activity;
 mod data_structures;
 mod instance;
-mod subsuperset;
 mod small_indices;
 mod solve;
+mod subsuperset;
 
 /// Minimum hitting set solver
 #[derive(Debug, StructOpt)]
@@ -41,6 +41,7 @@ struct CsvRecord {
     hs_size: usize,
     solve_time: f64,
     iterations: usize,
+    subsuper_prune_time: f64,
 }
 
 impl CsvRecord {
@@ -57,6 +58,7 @@ impl CsvRecord {
             hs_size: results.hs_size,
             solve_time: results.solve_time,
             iterations: results.stats.iterations,
+            subsuper_prune_time: results.stats.subsuper_prune_time.as_secs_f64(),
         })
     }
 }

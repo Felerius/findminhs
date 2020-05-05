@@ -2,6 +2,7 @@ use crate::create_idx_struct;
 use crate::data_structures::cont_idx_vec::ContiguousIdxVec;
 use crate::data_structures::segtree::{SegTree, SegTreeOp};
 use crate::data_structures::skipvec::SkipVec;
+use crate::small_indices::SmallIdx;
 use anyhow::{anyhow, ensure, Result};
 use log::{info, trace};
 use std::io::BufRead;
@@ -140,7 +141,7 @@ impl Instance {
     pub fn node<'a>(
         &'a self,
         node_idx: NodeIdx,
-    ) -> impl Iterator<Item = EdgeIdx> + ExactSizeIterator + 'a {
+    ) -> impl Iterator<Item = EdgeIdx> + ExactSizeIterator + Clone + 'a {
         self.node_incidences[node_idx.idx()]
             .iter()
             .map(|(_, (edge_idx, _))| *edge_idx)
@@ -150,7 +151,7 @@ impl Instance {
     pub fn edge<'a>(
         &'a self,
         edge_idx: EdgeIdx,
-    ) -> impl Iterator<Item = NodeIdx> + ExactSizeIterator + 'a {
+    ) -> impl Iterator<Item = NodeIdx> + ExactSizeIterator + Clone + 'a {
         self.edge_incidences[edge_idx.idx()]
             .iter()
             .map(|(_, (node_idx, _))| *node_idx)

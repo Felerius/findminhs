@@ -1,5 +1,6 @@
 use crate::data_structures::segtree::{SegTree, SegTreeOp};
 use crate::instance::{Instance, NodeIdx};
+use crate::small_indices::SmallIdx;
 use anyhow::Result;
 use log::trace;
 use rand::{Rng, SeedableRng};

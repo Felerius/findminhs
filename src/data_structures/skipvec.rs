@@ -1,4 +1,5 @@
 use crate::create_idx_struct;
+use crate::small_indices::SmallIdx;
 use std::convert::TryFrom;
 use std::fmt::{self, Debug, Formatter};
 use std::iter::{self, FromIterator, FusedIterator};

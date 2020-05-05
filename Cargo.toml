@@ -13,6 +13,7 @@ anyhow = "1.0"
 csv = "1.1"
 derivative = "2.1"
 env_logger = "0.7"
+fxhash = "0.2"
 #log = { version = "0.4", features = ["max_level_debug", "release_max_level_info"] }
 log = { version = "0.4", features = ["release_max_level_debug"] }
 rand = "0.7"

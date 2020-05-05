@@ -1,6 +1,13 @@
+use crate::create_idx_struct;
 use crate::instance::{EdgeIdx, Instance, NodeIdx};
+use crate::small_indices::SmallIdx;
+use crate::solve::Stats;
+use fxhash::FxHasher32;
 use log::{debug, log_enabled, trace, Level};
 use std::cmp::Reverse;
+use std::collections::{BTreeMap, HashMap};
+use std::hash::{BuildHasherDefault, Hash};
+use std::iter::Peekable;
 use std::time::Instant;
 
 #[derive(Debug)]
@@ -12,6 +19,164 @@ enum ReducedItem {
 #[derive(Debug, Default)]
 pub struct Reduction {
     reduced: Vec<ReducedItem>,
+}
+
+type Fx32HashMap<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher32>>;
+
+#[derive(Debug)]
+enum SmallMap<K: SmallIdx, V> {
+    Small(Vec<V>),
+    Large(Fx32HashMap<K, V>),
+}
+
+create_idx_struct!(TrieNodeIdx);
+
+#[derive(Debug)]
+struct SubsetTrie<T: SmallIdx> {
+    item_range_len: usize,
+    nexts: Vec<SmallMap<T, TrieNodeIdx>>,
+    is_set: Vec<bool>,
+}
+
+#[derive(Debug)]
+struct SupersetTrie<T: SmallIdx> {
+    nexts: Vec<BTreeMap<T, TrieNodeIdx>>,
+    is_set: Vec<bool>,
+}
+
+impl<K: SmallIdx, V: SmallIdx> SmallMap<K, V> {
+    fn new(key_range_size: usize) -> Self {
+        if key_range_size < 256 {
+            Self::Small(vec![V::INVALID; key_range_size])
+        } else {
+            Self::Large(Fx32HashMap::default())
+        }
+    }
+
+    fn get(&self, key: K) -> V {
+        match self {
+            Self::Small(vec) => vec[key.idx()],
+            Self::Large(map) => map.get(&key).copied().unwrap_or(V::INVALID),
+        }
+    }
+
+    fn get_or_insert(&mut self, key: K, value: V) -> V {
+        match self {
+            Self::Small(vec) => {
+                if !vec[key.idx()].valid() {
+                    vec[key.idx()] = value;
+                }
+                vec[key.idx()]
+            }
+            Self::Large(map) => *map.entry(key).or_insert(value),
+        }
+    }
+}
+
+impl<T: SmallIdx> SubsetTrie<T> {
+    fn new(item_range_len: usize) -> Self {
+        Self {
+            item_range_len,
+            nexts: vec![SmallMap::new(item_range_len)],
+            is_set: vec![false],
+        }
+    }
+
+    fn insert(&mut self, iter: impl IntoIterator<Item = T>) {
+        let mut idx = TrieNodeIdx(0);
+        for item in iter {
+            let new_node_idx = TrieNodeIdx::from(self.nexts.len());
+            idx = self.nexts[idx.idx()].get_or_insert(item, new_node_idx);
+            if idx == new_node_idx {
+                self.nexts.push(SmallMap::new(self.item_range_len));
+                self.is_set.push(false);
+            }
+        }
+        self.is_set[idx.idx()] = true;
+    }
+
+    fn contains_subset_at(
+        &self,
+        node: TrieNodeIdx,
+        mut iter: impl Iterator<Item = T> + Clone,
+    ) -> bool {
+        let next = &self.nexts[node.idx()];
+        while let Some(item) = iter.next() {
+            let next_node = next.get(item);
+            if next_node.valid() {
+                if self.is_set[next_node.idx()] || self.contains_subset_at(next_node, iter.clone())
+                {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    fn contains_subset<I>(&self, iter: I) -> bool
+    where
+        I: IntoIterator<Item = T>,
+        I::IntoIter: Clone,
+    {
+        self.is_set[0] || self.contains_subset_at(TrieNodeIdx(0), iter.into_iter())
+    }
+}
+
+impl<T: SmallIdx> SupersetTrie<T> {
+    fn new() -> Self {
+        Self {
+            nexts: vec![BTreeMap::new()],
+            is_set: vec![false],
+        }
+    }
+
+    fn insert(&mut self, iter: impl IntoIterator<Item = T>) {
+        let mut idx = TrieNodeIdx(0);
+        for item in iter {
+            let new_node_idx = TrieNodeIdx::from(self.nexts.len());
+            idx = *self.nexts[idx.idx()].entry(item).or_insert(new_node_idx);
+            if idx == new_node_idx {
+                self.nexts.push(BTreeMap::new());
+                self.is_set.push(false);
+            }
+        }
+        self.is_set[idx.idx()] = true;
+    }
+
+    fn contains_superset_at(
+        &self,
+        node: TrieNodeIdx,
+        lower: T,
+        mut iter: Peekable<impl Iterator<Item = T> + Clone>,
+    ) -> bool {
+        let next = &self.nexts[node.idx()];
+        let upper = if let Some(&upper) = iter.peek() {
+            upper
+        } else {
+            return true;
+        };
+        for (&value, &next_node) in next.range(lower..=upper) {
+            let mut iter_clone = iter.clone();
+            let result = if value == upper {
+                iter_clone.next();
+                self.contains_superset_at(next_node, upper, iter_clone)
+            } else {
+                self.contains_superset_at(next_node, lower, iter_clone)
+            };
+            if result {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn contains_superset<I>(&self, iter: I) -> bool
+    where
+        I: IntoIterator<Item = T>,
+        I::IntoIter: Clone,
+    {
+        self.contains_superset_at(TrieNodeIdx(0), 0usize.into(), iter.into_iter().peekable())
+    }
 }
 
 impl Reduction {
@@ -32,49 +197,20 @@ impl Reduction {
     }
 }
 
-fn is_subset_or_equal<T, I1, I2>(left: I1, right: I2) -> bool
-where
-    I1: IntoIterator<Item = T>,
-    I2: IntoIterator<Item = T>,
-    T: Ord,
-{
-    let mut iter_right = right.into_iter().peekable();
-    for item_left in left {
-        while let Some(item_right) = iter_right.peek() {
-            if item_right >= &item_left {
-                break;
-            }
-            iter_right.next();
-        }
-        match iter_right.next() {
-            None => return false,
-            Some(item_right) if item_left != item_right => return false,
-            _ => {}
-        }
-    }
-    true
-}
-
 fn prune_redundant_nodes(instance: &mut Instance, reduction: &mut Reduction) -> usize {
     let mut nodes = instance.nodes().to_vec();
     nodes.sort_unstable_by_key(|&node| Reverse(instance.node_degree(node)));
 
+    let mut trie = SupersetTrie::new();
     let mut num_kept = 0;
     for idx in 0..nodes.len() {
         let node = nodes[idx];
-        let mut prunable = false;
-        for &larger_node in &nodes[0..num_kept] {
-            if is_subset_or_equal(instance.node(node), instance.node(larger_node)) {
-                trace!("Deleting node {} because of {}", node, larger_node);
-                prunable = true;
-                break;
-            }
-        }
-        if prunable {
+        if trie.contains_superset(instance.node(node)) {
+            trace!("Pruning node {}", node);
             instance.delete_node(node);
             reduction.reduced.push(ReducedItem::Node(node));
         } else {
-            nodes.swap(num_kept, idx);
+            trie.insert(instance.node(node));
             num_kept += 1;
         }
 
@@ -94,22 +230,16 @@ fn prune_redundant_edges(instance: &mut Instance, reduction: &mut Reduction) -> 
     let mut edges = instance.edges().to_vec();
     edges.sort_unstable_by_key(|&edge| instance.edge_degree(edge));
 
+    let mut trie = SubsetTrie::new(instance.num_nodes_total());
     let mut num_kept = 0;
     for idx in 0..edges.len() {
         let edge = edges[idx];
-        let mut prunable = false;
-        for &smaller_edge in &edges[0..num_kept] {
-            if is_subset_or_equal(instance.edge(smaller_edge), instance.edge(edge)) {
-                trace!("Deleting edge {} because of {}", edge, smaller_edge);
-                prunable = true;
-                break;
-            }
-        }
-        if prunable {
+        if trie.contains_subset(instance.edge(edge)) {
+            trace!("Pruning edge {}", edge);
             instance.delete_edge(edge);
             reduction.reduced.push(ReducedItem::Edge(edge));
         } else {
-            edges.swap(num_kept, idx);
+            trie.insert(instance.edge(edge));
             num_kept += 1;
         }
 
@@ -125,7 +255,7 @@ fn prune_redundant_edges(instance: &mut Instance, reduction: &mut Reduction) -> 
     edges.len() - num_kept
 }
 
-pub fn prune(instance: &mut Instance) -> Reduction {
+pub fn prune(instance: &mut Instance, stats: &mut Stats) -> Reduction {
     let time_start = Instant::now();
     let mut reduction = Reduction::default();
     let mut pruned_nodes = 0;
@@ -149,27 +279,16 @@ pub fn prune(instance: &mut Instance) -> Reduction {
             break;
         }
     }
+    let elapsed = Instant::now() - time_start;
+    stats.subsuper_prune_time += elapsed;
     debug!(
         "Pruned {} nodes, {} edges in {} iterations ({:.2?}), remaining: {} nodes, {} edges",
         pruned_nodes,
         pruned_edges,
         current_iter,
-        Instant::now() - time_start,
+        elapsed,
         instance.num_nodes(),
         instance.num_edges(),
     );
     reduction
-}
-
-#[cfg(test)]
-mod tests {
-    use super::is_subset_or_equal;
-
-    #[test]
-    fn test_is_subset_or_equal() {
-        assert!(is_subset_or_equal(vec![1], vec![1, 2]));
-        assert!(is_subset_or_equal(vec![1, 2], vec![1, 2]));
-        assert!(!is_subset_or_equal(vec![1, 3], vec![1, 2]));
-        assert!(!is_subset_or_equal(vec![1, 2, 3], vec![1, 2]));
-    }
 }

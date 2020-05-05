@@ -1,15 +1,17 @@
 use crate::activity::Activities;
 use crate::instance::{Instance, NodeIdx};
+use crate::small_indices::SmallIdx;
 use crate::subsuperset;
 use crate::subsuperset::Reduction;
 use anyhow::Result;
 use log::{debug, info, trace};
 use rand::{Rng, SeedableRng};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone, Default)]
 pub struct Stats {
     pub iterations: usize,
+    pub subsuper_prune_time: Duration,
 }
 
 #[derive(Debug, Clone)]
@@ -107,7 +109,7 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
     // Don't prune on the first iteration, we already do it before calculating
     // the greedy approximation
     let reduction = if state.stats.iterations > 1 {
-        subsuperset::prune(instance)
+        subsuperset::prune(instance, &mut state.stats)
     } else {
         Reduction::default()
     };
@@ -155,7 +157,8 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
 
 pub fn solve(instance: &mut Instance, mut rng: impl Rng + SeedableRng) -> Result<SolveResult> {
     let time_start = Instant::now();
-    subsuperset::prune(instance);
+    let mut stats = Stats::default();
+    subsuperset::prune(instance, &mut stats);
     let approx = greedy_approx(instance);
     let activities = Activities::new(instance, &mut rng)?;
     let mut state = State {
@@ -163,7 +166,7 @@ pub fn solve(instance: &mut Instance, mut rng: impl Rng + SeedableRng) -> Result
         incomplete_hs: vec![],
         best_known: approx,
         activities,
-        stats: Stats::default(),
+        stats,
     };
     solve_recursive(instance, &mut state);
     let solve_time = Instant::now() - time_start;

@@ -1,3 +1,29 @@
+use std::fmt::{Debug, Display};
+use std::hash::Hash;
+
+pub trait SmallIdx:
+    Sized
+    + Copy
+    + Default
+    + Debug
+    + Display
+    + Hash
+    + Ord
+    + Into<usize>
+    + Into<u32>
+    + From<usize>
+    + From<u32>
+{
+    const INVALID: Self;
+
+    fn idx(&self) -> usize;
+
+    #[allow(dead_code)]
+    fn valid(&self) -> bool {
+        *self != Self::INVALID
+    }
+}
+
 /// Creates an index struct that uses a `u32` to store the index.
 #[macro_export]
 macro_rules! create_idx_struct {
@@ -5,17 +31,12 @@ macro_rules! create_idx_struct {
         #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
         pub struct $name(u32);
 
-        impl $name {
+        impl $crate::small_indices::SmallIdx for $name {
             #[allow(dead_code)]
-            pub const INVALID: Self = Self(u32::max_value());
+            const INVALID: Self = Self(u32::max_value());
 
-            pub fn idx(&self) -> usize {
+            fn idx(&self) -> usize {
                 self.0 as usize
-            }
-
-            #[allow(dead_code)]
-            pub fn valid(&self) -> bool {
-                *self != Self::INVALID
             }
         }
 
@@ -34,6 +55,7 @@ macro_rules! create_idx_struct {
 
         impl ::std::convert::Into<usize> for $name {
             fn into(self) -> usize {
+                use $crate::small_indices::SmallIdx;
                 self.idx()
             }
         }
@@ -52,6 +74,7 @@ macro_rules! create_idx_struct {
 
         impl ::std::default::Default for $name {
             fn default() -> Self {
+                use $crate::small_indices::SmallIdx;
                 Self::INVALID
             }
         }
