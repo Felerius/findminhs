@@ -60,63 +60,41 @@ impl Instance {
         let edges = (0..num_edges).map(EdgeIdx::from).collect();
 
         let mut edge_incidences = Vec::with_capacity(num_edges);
+        let mut node_degrees = vec![0; num_nodes];
         for _ in 0..num_edges {
             line.clear();
             reader.read_line(&mut line)?;
-            let mut numbers = line.split_ascii_whitespace().map(str::parse);
+            let mut numbers = line.split_ascii_whitespace().map(str::parse::<usize>);
             let degree = numbers
                 .next()
                 .ok_or_else(|| anyhow!("empty edge line in input, expected degree"))??;
             ensure!(degree > 0, "edges may not be empty");
 
-            let mut incidences =
-                SkipVec::with_len(degree as usize, (NodeIdx::INVALID, EntryIdx::INVALID));
-            for (node_idx, (_index, entry)) in numbers.zip(&mut incidences) {
-                entry.0 = NodeIdx(node_idx?);
+            let incidences =
+                SkipVec::try_sorted_from(numbers.map(|num_result| {
+                    num_result.map(|num| (NodeIdx::from(num), EntryIdx::INVALID))
+                }))?;
+            for (_, (node_idx, _)) in &incidences {
+                node_degrees[node_idx.idx()] += 1;
             }
             edge_incidences.push(incidences);
         }
 
-        let mut all_incidences: Vec<_> = edge_incidences
+        let mut node_incidences: Vec<_> = node_degrees
             .iter()
-            .enumerate()
-            .flat_map(|(index, list)| {
-                let edge_idx = EdgeIdx(index as u32);
-                list.iter()
-                    .map(move |(index, _value)| (edge_idx, EntryIdx::from(index)))
-            })
+            .map(|&len| SkipVec::with_len(len))
             .collect();
-        // Due to the double indirection, caching the key here is a bit faster
-        // (and a lot faster than unstable sorts). Using a stable sort allows
-        // us to avoid using the edge index as a secondary sort criteria.
-        all_incidences.sort_by_cached_key(|(edge_idx, entry_idx)| {
-            edge_incidences[edge_idx.idx()][entry_idx.idx()]
-        });
-
-        let mut node_incidences = Vec::with_capacity(num_nodes);
-        let mut rem_incidences = &all_incidences[..];
-        for node_idx in (0..num_nodes).map(NodeIdx::from) {
-            let degree = rem_incidences
-                .iter()
-                .take_while(|(edge_idx, entry_idx)| {
-                    edge_incidences[edge_idx.idx()][entry_idx.idx()].0 == node_idx
-                })
-                .count();
-            let mut incidences = SkipVec::with_len(degree, (EdgeIdx::INVALID, EntryIdx::INVALID));
-
-            // Patterns cannot be combined until https://github.com/rust-lang/rust/issues/68354
-            // is stable
-            for (rem_incidences_pair, incidences_pair) in
-                rem_incidences[..degree].iter().zip(&mut incidences)
-            {
-                let (edge_idx, edge_entry_idx) = rem_incidences_pair;
-                let (node_entry_idx, node_entry) = incidences_pair;
-                edge_incidences[edge_idx.idx()][edge_entry_idx.idx()].1 =
-                    EntryIdx::from(node_entry_idx);
-                *node_entry = (*edge_idx, *edge_entry_idx);
+        let mut rem_node_degrees = node_degrees;
+        for (edge_idx, incidences) in edge_incidences.iter_mut().enumerate() {
+            let edge_idx = EdgeIdx::from(edge_idx);
+            for (edge_entry_idx, edge_entry) in incidences.iter_mut() {
+                let node_idx = edge_entry.0.idx();
+                let node_entry_idx = node_incidences[node_idx].len() - rem_node_degrees[node_idx];
+                rem_node_degrees[node_idx] -= 1;
+                edge_entry.1 = EntryIdx::from(node_entry_idx);
+                node_incidences[node_idx][node_entry_idx] =
+                    (edge_idx, EntryIdx::from(edge_entry_idx));
             }
-            node_incidences.push(incidences);
-            rem_incidences = &rem_incidences[degree..];
         }
 
         let edge_degrees = (0..num_edges)

@@ -23,7 +23,7 @@ pub struct SkipVec<T> {
     deletions: Vec<EntryIdx>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 struct Entry<T> {
     prev: EntryIdx,
     next: EntryIdx,
@@ -32,7 +32,7 @@ struct Entry<T> {
     deleted: bool,
 }
 
-/// Iterator over a `ArrayLinkedList<T>`.
+/// Iterator over an `SkipVec<T>`.
 #[derive(Debug, Clone)]
 pub struct Iter<'a, T> {
     list: &'a SkipVec<T>,
@@ -41,7 +41,7 @@ pub struct Iter<'a, T> {
     rem_len: u32,
 }
 
-/// Mutable iterator over a `ArrayLinkedList<T>`.
+/// Mutable iterator over an `SkipVec<T>`.
 #[derive(Debug)]
 pub struct IterMut<'a, T> {
     list: &'a mut SkipVec<T>,
@@ -51,6 +51,18 @@ pub struct IterMut<'a, T> {
 }
 
 create_idx_struct!(EntryIdx);
+
+impl<T> Entry<T> {
+    fn new(value: T) -> Self {
+        Self {
+            prev: EntryIdx::INVALID,
+            next: EntryIdx::INVALID,
+            value,
+            #[cfg(feature = "debug-skipvec")]
+            deleted: false,
+        }
+    }
+}
 
 impl<T> SkipVec<T> {
     #[cfg(feature = "debug-skipvec")]
@@ -84,11 +96,55 @@ impl<T> SkipVec<T> {
         }
     }
 
-    pub fn with_len(len: usize, item: T) -> Self
+    fn from_entry_vec(mut vec: Vec<Entry<T>>) -> Self {
+        for (idx, entry) in vec.iter_mut().enumerate() {
+            entry.prev = idx.checked_sub(1).map_or(EntryIdx::INVALID, EntryIdx::from);
+            entry.next = EntryIdx::from(idx + 1);
+        }
+        if let Some(entry) = vec.last_mut() {
+            entry.next = EntryIdx::INVALID;
+        }
+        debug_assert!(
+            u32::try_from(vec.len()).is_ok(),
+            "SkipVec size must fit a u32"
+        );
+        let len = vec.len() as u32;
+        let (first, last) = if vec.is_empty() {
+            (EntryIdx::INVALID, EntryIdx::INVALID)
+        } else {
+            (EntryIdx(0), EntryIdx(len - 1))
+        };
+        #[cfg_attr(not(feature = "debug-skipvec"), allow(clippy::let_and_return))]
+        let instance = Self {
+            entries: vec.into_boxed_slice(),
+            first,
+            last,
+            len,
+            #[cfg(feature = "debug-skipvec")]
+            deletions: vec![],
+        };
+        #[cfg(feature = "debug-skipvec")]
+        instance.check_invariants();
+        instance
+    }
+
+    pub fn try_sorted_from<E>(iter: impl IntoIterator<Item = Result<T, E>>) -> Result<Self, E>
     where
-        T: Clone,
+        T: Ord,
     {
-        iter::repeat(item).take(len).collect()
+        let mut vec = iter
+            .into_iter()
+            .map(|result| result.map(Entry::new))
+            .collect::<Result<Vec<_>, _>>()?;
+        vec.sort_unstable_by(|entry1, entry2| entry1.value.cmp(&entry2.value));
+        Ok(Self::from_entry_vec(vec))
+    }
+
+    pub fn with_len(len: usize) -> Self
+    where
+        T: Default,
+    {
+        iter::repeat_with(T::default).take(len).collect()
     }
 
     pub fn iter(&self) -> Iter<'_, T> {
@@ -207,46 +263,7 @@ impl<T> Default for SkipVec<T> {
 
 impl<T> FromIterator<T> for SkipVec<T> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
-        let mut vec: Vec<_> = iter
-            .into_iter()
-            .enumerate()
-            .map(|(index, value)| Entry {
-                prev: index
-                    .checked_sub(1)
-                    .map_or(EntryIdx::INVALID, EntryIdx::from),
-                next: EntryIdx::from(index + 1),
-                value,
-                #[cfg(feature = "debug-skipvec")]
-                deleted: false,
-            })
-            .collect();
-        if let Some(entry) = vec.last_mut() {
-            entry.next = EntryIdx::INVALID;
-        }
-        debug_assert!(
-            u32::try_from(vec.len()).is_ok(),
-            "SkipVec size must fit a u32"
-        );
-        let len = vec.len() as u32;
-        let (first, last) = if vec.is_empty() {
-            (EntryIdx::INVALID, EntryIdx::INVALID)
-        } else {
-            (EntryIdx(0), EntryIdx(len - 1))
-        };
-        #[cfg_attr(not(feature = "debug-skipvec"), allow(clippy::let_and_return))]
-        let instance = Self {
-            entries: vec.into_boxed_slice(),
-            first,
-            last,
-            len,
-            #[cfg(feature = "debug-skipvec")]
-            deletions: vec![],
-        };
-        #[cfg(feature = "debug-skipvec")]
-        {
-            instance.check_invariants();
-        }
-        instance
+        Self::from_entry_vec(iter.into_iter().map(Entry::new).collect())
     }
 }
 
