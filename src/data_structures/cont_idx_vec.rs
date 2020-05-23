@@ -15,6 +15,7 @@ create_idx_struct!(DataIdx);
 /// This is achieved by a index to position indirection table. Deletion/
 /// restoration is implemented by swapping, partitioning the deleted elements
 /// after all non-deleted.
+#[derive(Debug, Clone)]
 pub struct ContiguousIdxVec<T> {
     data: Vec<T>,
     indices: Vec<DataIdx>,

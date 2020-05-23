@@ -1,5 +1,7 @@
 use std::fmt::{Debug, Display};
-use std::hash::Hash;
+use std::hash::{Hash, BuildHasherDefault};
+use fxhash::FxHasher32;
+use std::collections::{HashSet, HashMap};
 
 pub trait SmallIdx:
     Sized
@@ -80,3 +82,11 @@ macro_rules! create_idx_struct {
         }
     };
 }
+
+type Fx32HashBuilder = BuildHasherDefault<FxHasher32>;
+
+/// Hash set with optimized hash function for small indices.
+pub type IdxHashSet<I> = HashSet<I, Fx32HashBuilder>;
+
+/// Hash map with optimized hash function for small indices.
+pub type IdxHashMap<I, V> = HashMap<I, V, Fx32HashBuilder>;

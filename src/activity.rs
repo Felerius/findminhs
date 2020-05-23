@@ -126,21 +126,21 @@ impl<R: Rng> Activities<R> {
     pub fn boost_activity(&mut self, node_idx: NodeIdx, amount: f32) {
         trace!("Boosting {} by {}", node_idx, amount);
         let new_tiebreak = self.rng.gen();
-        self.activities.change_single(node_idx.idx(), |item| {
+        self.activities.change(node_idx.idx(), |item| {
             item.activity += amount;
             item.tiebreak = new_tiebreak;
         });
     }
 
     pub fn delete(&mut self, node_idx: NodeIdx) {
-        self.activities.change_single(node_idx.idx(), |item| {
+        self.activities.change(node_idx.idx(), |item| {
             debug_assert!(item.node_idx.valid(), "Node {} was deleted twice", node_idx);
             item.node_idx = NodeIdx::INVALID;
         });
     }
 
     pub fn restore(&mut self, node_idx: NodeIdx) {
-        self.activities.change_single(node_idx.idx(), |item| {
+        self.activities.change(node_idx.idx(), |item| {
             debug_assert!(
                 !item.node_idx.valid(),
                 "Node {} restored without being deleted",

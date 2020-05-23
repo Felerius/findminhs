@@ -4,7 +4,7 @@ use crate::small_indices::SmallIdx;
 use crate::subsuperset;
 use crate::subsuperset::Reduction;
 use anyhow::Result;
-use log::{debug, info, trace};
+use log::{debug, info, trace, warn};
 use rand::{Rng, SeedableRng};
 use std::time::{Duration, Instant};
 
@@ -18,7 +18,7 @@ pub struct Stats {
 struct State<R: Rng> {
     rng: R,
     incomplete_hs: Vec<NodeIdx>,
-    best_known: usize,
+    best_known: Vec<NodeIdx>,
     activities: Activities<R>,
     stats: Stats,
 }
@@ -31,7 +31,7 @@ pub struct SolveResult {
     pub stats: Stats,
 }
 
-fn greedy_approx(instance: &mut Instance) -> usize {
+fn greedy_approx(instance: &mut Instance) -> Vec<NodeIdx> {
     let time_start = Instant::now();
     let mut hs = vec![];
     while !instance.edges().is_empty() {
@@ -47,23 +47,21 @@ fn greedy_approx(instance: &mut Instance) -> usize {
         instance.restore_incident_edges(node);
         instance.restore_node(node);
     }
-    debug!(
-        "Greedy hs of size {}: {:?} ({:.2?})",
+    info!(
+        "Greedy hs of size {} ({:.2?})",
         hs.len(),
-        hs,
         Instant::now() - time_start
     );
-    hs.len()
+    hs
 }
 
 fn can_prune(instance: &Instance, state: &State<impl Rng>) -> bool {
-    let max_edge_degree = instance.max_edge_degree();
-    if instance.nodes().is_empty() || max_edge_degree == 0 {
-        return true;
-    }
-    let rem_lower_bound = (instance.num_nodes() + max_edge_degree - 1) / max_edge_degree;
+    let max_node_degree = instance.max_node_degree();
+    let num_edges = instance.num_edges();
+    debug_assert!(max_node_degree > 0);
+    let rem_lower_bound = (num_edges + max_node_degree - 1) / max_node_degree;
     let lower_bound = state.incomplete_hs.len() + rem_lower_bound;
-    lower_bound >= state.best_known
+    lower_bound >= state.best_known.len()
 }
 
 fn branch_on(node: NodeIdx, instance: &mut Instance, state: &mut State<impl Rng>) {
@@ -97,8 +95,17 @@ fn branch_on(node: NodeIdx, instance: &mut Instance, state: &mut State<impl Rng>
 
 fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
     if instance.edges().is_empty() {
-        debug!("Found HS of size {}", state.incomplete_hs.len());
-        state.best_known = state.incomplete_hs.len();
+        if state.incomplete_hs.len() < state.best_known.len() {
+            info!("Found HS of size {}", state.incomplete_hs.len());
+            state.best_known.truncate(state.incomplete_hs.len());
+            state.best_known.copy_from_slice(&state.incomplete_hs);
+        } else {
+            warn!(
+                "Found HS larger than best known ({} vs. {}), should have been pruned",
+                state.incomplete_hs.len(),
+                state.best_known.len()
+            );
+        }
         return;
     }
 
@@ -121,11 +128,7 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
         for &node in &state.incomplete_hs {
             state.activities.boost_activity(node, 1.0);
         }
-    } else if let Some(edge_idx) = instance.degree_1_edge() {
-        let node = instance
-            .edge(edge_idx)
-            .next()
-            .expect("Invalid degree 1 edge");
+    } else if let Some((_edge, node)) = instance.degree_1_edge() {
         instance.delete_node(node);
         instance.delete_incident_edges(node);
         state.activities.delete(node);
@@ -174,8 +177,9 @@ pub fn solve(instance: &mut Instance, mut rng: impl Rng + SeedableRng) -> Result
         "Solving took {} iterations ({:.2?})",
         state.stats.iterations, solve_time
     );
+    debug!("Final HS (size {}): {:?}", state.best_known.len(), &state.best_known);
     Ok(SolveResult {
-        hs_size: state.best_known,
+        hs_size: state.best_known.len(),
         solve_time: solve_time.as_secs_f64(),
         stats: state.stats,
     })

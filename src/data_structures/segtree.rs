@@ -42,7 +42,7 @@ impl<O: SegTreeOp> SegTree<O> {
         }
     }
 
-    pub fn change_single(&mut self, mut index: usize, op: impl FnOnce(&mut O::Item)) {
+    pub fn change(&mut self, mut index: usize, op: impl FnOnce(&mut O::Item)) {
         index += self.lazy.len();
         self.push(index);
         op(&mut self.data[index]);
@@ -50,6 +50,10 @@ impl<O: SegTreeOp> SegTree<O> {
             index /= 2;
             self.recalc_at(index);
         }
+    }
+
+    pub fn set(&mut self, index: usize, value: O::Item) {
+        self.change(index, |val| *val = value);
     }
 
     pub fn root(&self) -> &O::Item {

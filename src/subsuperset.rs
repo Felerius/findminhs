@@ -1,32 +1,27 @@
 use crate::create_idx_struct;
 use crate::instance::{EdgeIdx, Instance, NodeIdx};
-use crate::small_indices::SmallIdx;
+use crate::small_indices::{SmallIdx, IdxHashMap};
 use crate::solve::Stats;
-use fxhash::FxHasher32;
 use log::{debug, log_enabled, trace, Level};
 use std::cmp::Reverse;
-use std::collections::{BTreeMap, HashMap};
-use std::hash::{BuildHasherDefault, Hash};
-use std::iter::Peekable;
+use std::collections::BTreeMap;
 use std::time::Instant;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 enum ReducedItem {
     Node(NodeIdx),
     Edge(EdgeIdx),
 }
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Reduction {
     reduced: Vec<ReducedItem>,
 }
 
-type Fx32HashMap<K, V> = HashMap<K, V, BuildHasherDefault<FxHasher32>>;
-
 #[derive(Debug)]
 enum SmallMap<K: SmallIdx, V> {
     Small(Vec<V>),
-    Large(Fx32HashMap<K, V>),
+    Large(IdxHashMap<K, V>),
 }
 
 create_idx_struct!(TrieNodeIdx);
@@ -49,7 +44,7 @@ impl<K: SmallIdx, V: SmallIdx> SmallMap<K, V> {
         if key_range_size < 256 {
             Self::Small(vec![V::INVALID; key_range_size])
         } else {
-            Self::Large(Fx32HashMap::default())
+            Self::Large(IdxHashMap::default())
         }
     }
 
@@ -147,23 +142,20 @@ impl<T: SmallIdx> SupersetTrie<T> {
         &self,
         node: TrieNodeIdx,
         lower: T,
-        mut iter: Peekable<impl Iterator<Item = T> + Clone>,
+        upper: T,
+        iter: impl Iterator<Item = T> + Clone,
     ) -> bool {
         let next = &self.nexts[node.idx()];
-        let upper = if let Some(&upper) = iter.peek() {
-            upper
-        } else {
-            return true;
-        };
         for (&value, &next_node) in next.range(lower..=upper) {
             let mut iter_clone = iter.clone();
-            let result = if value == upper {
-                iter_clone.next();
-                self.contains_superset_at(next_node, upper, iter_clone)
+            let (next_lower, next_upper) = if value != upper {
+                (lower, upper)
+            } else if let Some(next_upper) = iter_clone.next() {
+                (upper, next_upper)
             } else {
-                self.contains_superset_at(next_node, lower, iter_clone)
+                return true;
             };
-            if result {
+            if self.contains_superset_at(next_node, next_lower, next_upper, iter_clone) {
                 return true;
             }
         }
@@ -175,7 +167,12 @@ impl<T: SmallIdx> SupersetTrie<T> {
         I: IntoIterator<Item = T>,
         I::IntoIter: Clone,
     {
-        self.contains_superset_at(TrieNodeIdx(0), 0usize.into(), iter.into_iter().peekable())
+        let mut iter = iter.into_iter();
+        if let Some(upper) = iter.next() {
+            self.contains_superset_at(TrieNodeIdx(0), T::from(0usize), upper, iter)
+        } else {
+            true
+        }
     }
 }
 
