@@ -1,7 +1,7 @@
-use std::fmt::{Debug, Display};
-use std::hash::{Hash, BuildHasherDefault};
 use fxhash::FxHasher32;
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
+use std::fmt::{Debug, Display};
+use std::hash::{BuildHasherDefault, Hash};
 
 pub trait SmallIdx:
     Sized
@@ -23,6 +23,15 @@ pub trait SmallIdx:
     #[allow(dead_code)]
     fn valid(&self) -> bool {
         *self != Self::INVALID
+    }
+
+    #[allow(dead_code)]
+    fn idx_if_valid(&self) -> Option<usize> {
+        if self.valid() {
+            Some(self.idx())
+        } else {
+            None
+        }
     }
 }
 

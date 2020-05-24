@@ -162,6 +162,7 @@ pub fn solve(instance: &mut Instance, mut rng: impl Rng + SeedableRng) -> Result
     let time_start = Instant::now();
     let mut stats = Stats::default();
     subsuperset::prune(instance, &mut stats);
+    info!("Initial reduction time: {:.2?}", stats.subsuper_prune_time);
     let approx = greedy_approx(instance);
     let activities = Activities::new(instance, &mut rng)?;
     let mut state = State {
@@ -177,7 +178,11 @@ pub fn solve(instance: &mut Instance, mut rng: impl Rng + SeedableRng) -> Result
         "Solving took {} iterations ({:.2?})",
         state.stats.iterations, solve_time
     );
-    debug!("Final HS (size {}): {:?}", state.best_known.len(), &state.best_known);
+    debug!(
+        "Final HS (size {}): {:?}",
+        state.best_known.len(),
+        &state.best_known
+    );
     Ok(SolveResult {
         hs_size: state.best_known.len(),
         solve_time: solve_time.as_secs_f64(),

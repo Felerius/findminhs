@@ -1,13 +1,17 @@
 use crate::create_idx_struct;
-use crate::instance::{EdgeIdx, Instance, NodeIdx};
-use crate::small_indices::{SmallIdx, IdxHashMap};
+use crate::data_structures::skipvec::SkipVec;
+use crate::instance::{EdgeIdx, EntryIdx, Instance, NodeIdx};
+use crate::small_indices::{IdxHashMap, SmallIdx};
 use crate::solve::Stats;
 use log::{debug, log_enabled, trace, Level};
 use std::cmp::Reverse;
+use std::collections::btree_map::Range as BTreeMapRange;
 use std::collections::BTreeMap;
+use std::mem;
+use std::ops::Bound;
 use std::time::Instant;
 
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 enum ReducedItem {
     Node(NodeIdx),
     Edge(EdgeIdx),
@@ -25,18 +29,25 @@ enum SmallMap<K: SmallIdx, V> {
 }
 
 create_idx_struct!(TrieNodeIdx);
+create_idx_struct!(SetIdx);
 
 #[derive(Debug)]
-struct SubsetTrie<T: SmallIdx> {
-    item_range_len: usize,
-    nexts: Vec<SmallMap<T, TrieNodeIdx>>,
+struct SubsetTrie {
+    num_nodes: usize,
+    nexts: Vec<SmallMap<NodeIdx, TrieNodeIdx>>,
     is_set: Vec<bool>,
+    stack: Vec<(TrieNodeIdx, SetIdx)>,
 }
 
 #[derive(Debug)]
-struct SupersetTrie<T: SmallIdx> {
-    nexts: Vec<BTreeMap<T, TrieNodeIdx>>,
+struct SupersetTrie {
+    nexts: Vec<BTreeMap<EdgeIdx, TrieNodeIdx>>,
     is_set: Vec<bool>,
+    stack: Vec<(
+        TrieNodeIdx,
+        SetIdx,
+        BTreeMapRange<'static, EdgeIdx, TrieNodeIdx>,
+    )>,
 }
 
 impl<K: SmallIdx, V: SmallIdx> SmallMap<K, V> {
@@ -68,64 +79,80 @@ impl<K: SmallIdx, V: SmallIdx> SmallMap<K, V> {
     }
 }
 
-impl<T: SmallIdx> SubsetTrie<T> {
-    fn new(item_range_len: usize) -> Self {
+impl SubsetTrie {
+    fn new(num_nodes: usize) -> Self {
         Self {
-            item_range_len,
-            nexts: vec![SmallMap::new(item_range_len)],
+            num_nodes,
+            nexts: vec![SmallMap::new(num_nodes)],
             is_set: vec![false],
+            stack: Vec::new(),
         }
     }
 
-    fn insert(&mut self, iter: impl IntoIterator<Item = T>) {
+    fn insert(&mut self, iter: impl IntoIterator<Item = NodeIdx>) {
         let mut idx = TrieNodeIdx(0);
-        for item in iter {
+        for node_idx in iter {
             let new_node_idx = TrieNodeIdx::from(self.nexts.len());
-            idx = self.nexts[idx.idx()].get_or_insert(item, new_node_idx);
+            idx = self.nexts[idx.idx()].get_or_insert(node_idx, new_node_idx);
             if idx == new_node_idx {
-                self.nexts.push(SmallMap::new(self.item_range_len));
+                self.nexts.push(SmallMap::new(self.num_nodes));
                 self.is_set.push(false);
             }
         }
         self.is_set[idx.idx()] = true;
     }
 
-    fn contains_subset_at(
-        &self,
-        node: TrieNodeIdx,
-        mut iter: impl Iterator<Item = T> + Clone,
-    ) -> bool {
-        let next = &self.nexts[node.idx()];
-        while let Some(item) = iter.next() {
-            let next_node = next.get(item);
-            if next_node.valid() {
-                if self.is_set[next_node.idx()] || self.contains_subset_at(next_node, iter.clone())
-                {
-                    return true;
+    fn contains_subset(&mut self, set: &SkipVec<(NodeIdx, EntryIdx)>) -> bool {
+        if self.is_set[0] {
+            return true;
+        }
+
+        let first_idx = if let Some(idx) = set.first() {
+            SetIdx::from(idx)
+        } else {
+            return false;
+        };
+
+        debug_assert!(self.stack.is_empty());
+        self.stack.push((TrieNodeIdx(0), first_idx));
+        while let Some((trie_node, mut set_idx)) = self.stack.pop() {
+            let nexts = &self.nexts[trie_node.idx()];
+            loop {
+                let item = set[set_idx.idx()].0;
+                let next_node = nexts.get(item);
+                set_idx = set
+                    .next(set_idx.idx())
+                    .map_or(SetIdx::INVALID, SetIdx::from);
+                if next_node.valid() {
+                    if self.is_set[next_node.idx()] {
+                        self.stack.clear();
+                        return true;
+                    }
+                    if set_idx.valid() {
+                        self.stack.push((trie_node, set_idx));
+                        self.stack.push((next_node, set_idx));
+                        break;
+                    }
+                }
+                if !set_idx.valid() {
+                    break;
                 }
             }
         }
         false
     }
-
-    fn contains_subset<I>(&self, iter: I) -> bool
-    where
-        I: IntoIterator<Item = T>,
-        I::IntoIter: Clone,
-    {
-        self.is_set[0] || self.contains_subset_at(TrieNodeIdx(0), iter.into_iter())
-    }
 }
 
-impl<T: SmallIdx> SupersetTrie<T> {
+impl SupersetTrie {
     fn new() -> Self {
         Self {
             nexts: vec![BTreeMap::new()],
             is_set: vec![false],
+            stack: Vec::new(),
         }
     }
 
-    fn insert(&mut self, iter: impl IntoIterator<Item = T>) {
+    fn insert(&mut self, iter: impl IntoIterator<Item = EdgeIdx>) {
         let mut idx = TrieNodeIdx(0);
         for item in iter {
             let new_node_idx = TrieNodeIdx::from(self.nexts.len());
@@ -138,41 +165,69 @@ impl<T: SmallIdx> SupersetTrie<T> {
         self.is_set[idx.idx()] = true;
     }
 
-    fn contains_superset_at(
-        &self,
-        node: TrieNodeIdx,
-        lower: T,
-        upper: T,
-        iter: impl Iterator<Item = T> + Clone,
-    ) -> bool {
-        let next = &self.nexts[node.idx()];
-        for (&value, &next_node) in next.range(lower..=upper) {
-            let mut iter_clone = iter.clone();
-            let (next_lower, next_upper) = if value != upper {
-                (lower, upper)
-            } else if let Some(next_upper) = iter_clone.next() {
-                (upper, next_upper)
-            } else {
-                return true;
-            };
-            if self.contains_superset_at(next_node, next_lower, next_upper, iter_clone) {
-                return true;
+    fn contains_superset(&mut self, set: &SkipVec<(EdgeIdx, EntryIdx)>) -> bool {
+        let first_idx = if let Some(idx) = set.first() {
+            SetIdx::from(idx)
+        } else {
+            return true;
+        };
+
+        let mut stack = mem::take(&mut self.stack);
+        let edge_zero = EdgeIdx::from(0_u32);
+        let first_edge = set[first_idx.idx()].0;
+        stack.push((
+            TrieNodeIdx(0),
+            first_idx,
+            self.nexts[0].range(edge_zero..=first_edge),
+        ));
+
+        let mut result = false;
+        while let Some((trie_idx, set_idx, mut range)) = stack.pop() {
+            // Iterate the range backwards, so that if we have a match for the
+            // next item from the set, we process it first.
+            if let Some((&edge_idx, &next_trie_idx)) = range.next_back() {
+                let cur_item = set[set_idx.idx()].0;
+                stack.push((trie_idx, set_idx, range));
+                if edge_idx == cur_item {
+                    if let Some(next_set_idx) = set.next(set_idx.idx()) {
+                        let next_item = set[next_set_idx].0;
+                        let next_range = self.nexts[next_trie_idx.idx()]
+                            .range((Bound::Excluded(cur_item), Bound::Included(next_item)));
+                        stack.push((next_trie_idx, SetIdx::from(next_set_idx), next_range));
+                    } else {
+                        result = true;
+                        break;
+                    }
+                } else {
+                    let lower_range_bound = set
+                        .prev(set_idx.idx())
+                        .map_or(Bound::Included(edge_zero), |prev_idx| {
+                            Bound::Excluded(set[prev_idx].0)
+                        });
+                    let next_range = self.nexts[next_trie_idx.idx()]
+                        .range((lower_range_bound, Bound::Included(cur_item)));
+                    stack.push((next_trie_idx, set_idx, next_range));
+                }
             }
         }
-        false
-    }
 
-    fn contains_superset<I>(&self, iter: I) -> bool
-    where
-        I: IntoIterator<Item = T>,
-        I::IntoIter: Clone,
-    {
-        let mut iter = iter.into_iter();
-        if let Some(upper) = iter.next() {
-            self.contains_superset_at(TrieNodeIdx(0), T::from(0usize), upper, iter)
-        } else {
-            true
-        }
+        // Cast the stack back to one with 'static ranges. This is safe
+        // changing the lifetime does not change the size of the range type
+        // (otherwise the cast the other way around wouldn't be safe), and we
+        // never read from what remains on the stack since we set the length to
+        // zero.
+        stack.clear();
+        let stack_ptr = stack.as_mut_ptr();
+        let capacity = stack.capacity();
+        // Leak stack
+        mem::ManuallyDrop::new(stack);
+        // ptr-ptr casts don't like casting lifetime params
+        // (https://github.com/rust-lang/rust/issues/27214), so we need to
+        // cast with one in-between stop
+        let void_ptr = stack_ptr as *mut u64;
+        self.stack = unsafe { Vec::from_raw_parts(void_ptr as *mut _, 0, capacity) };
+
+        result
     }
 }
 
@@ -185,10 +240,10 @@ impl Reduction {
     }
 
     pub fn restore(&self, instance: &mut Instance) {
-        for item in self.reduced.iter().rev() {
+        for &item in self.reduced.iter().rev() {
             match item {
-                ReducedItem::Node(node_idx) => instance.restore_node(*node_idx),
-                ReducedItem::Edge(edge_idx) => instance.restore_edge(*edge_idx),
+                ReducedItem::Node(node_idx) => instance.restore_node(node_idx),
+                ReducedItem::Edge(edge_idx) => instance.restore_edge(edge_idx),
             }
         }
     }
@@ -202,7 +257,7 @@ fn prune_redundant_nodes(instance: &mut Instance, reduction: &mut Reduction) -> 
     let mut num_kept = 0;
     for idx in 0..nodes.len() {
         let node = nodes[idx];
-        if trie.contains_superset(instance.node(node)) {
+        if trie.contains_superset(instance.node_vec(node)) {
             trace!("Pruning node {}", node);
             instance.delete_node(node);
             reduction.reduced.push(ReducedItem::Node(node));
@@ -231,7 +286,7 @@ fn prune_redundant_edges(instance: &mut Instance, reduction: &mut Reduction) -> 
     let mut num_kept = 0;
     for idx in 0..edges.len() {
         let edge = edges[idx];
-        if trie.contains_subset(instance.edge(edge)) {
+        if trie.contains_subset(instance.edge_vec(edge)) {
             trace!("Pruning edge {}", edge);
             instance.delete_edge(edge);
             reduction.reduced.push(ReducedItem::Edge(edge));

@@ -2,7 +2,7 @@ use crate::create_idx_struct;
 use crate::data_structures::cont_idx_vec::ContiguousIdxVec;
 use crate::data_structures::segtree::{SegTree, SegTreeOp};
 use crate::data_structures::skipvec::SkipVec;
-use crate::small_indices::{SmallIdx, IdxHashSet};
+use crate::small_indices::{IdxHashSet, SmallIdx};
 use anyhow::{anyhow, ensure, Result};
 use log::{info, trace};
 use std::io::BufRead;
@@ -97,8 +97,18 @@ impl Instance {
             }
         }
 
-        let degree_1_edges = (0..num_edges).filter(|&idx| edge_incidences[idx].len() == 1).map(EdgeIdx::from).collect();
-        let node_degrees = (0..num_nodes).map(|idx| node_incidences[idx].len() as u32).collect();
+        let degree_1_edges = (0..num_edges)
+            .filter_map(|idx| {
+                if edge_incidences[idx].len() == 1 {
+                    Some(EdgeIdx::from(idx))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let node_degrees = (0..num_nodes)
+            .map(|idx| node_incidences[idx].len() as u32)
+            .collect();
 
         info!(
             "Loaded instance with {} nodes, {} edges in {:.2?}",
@@ -148,6 +158,14 @@ impl Instance {
             .map(|(_, (node_idx, _))| *node_idx)
     }
 
+    pub fn node_vec(&self, node_idx: NodeIdx) -> &SkipVec<(EdgeIdx, EntryIdx)> {
+        &self.node_incidences[node_idx.idx()]
+    }
+
+    pub fn edge_vec(&self, edge_idx: EdgeIdx) -> &SkipVec<(NodeIdx, EntryIdx)> {
+        &self.edge_incidences[edge_idx.idx()]
+    }
+
     /// Alive nodes in the instance, in arbitrary order.
     pub fn nodes(&self) -> &[NodeIdx] {
         &self.nodes
@@ -175,7 +193,12 @@ impl Instance {
     }
 
     pub fn degree_1_edge(&mut self) -> Option<(EdgeIdx, NodeIdx)> {
-        self.degree_1_edges.iter().next().map(|&edge_idx| (edge_idx, self.edge(edge_idx).next().expect("Empty degree 1 edge")))
+        self.degree_1_edges.iter().next().map(|&edge_idx| {
+            (
+                edge_idx,
+                self.edge(edge_idx).next().expect("Empty degree 1 edge"),
+            )
+        })
     }
 
     /// Deletes a node from the instance.
@@ -184,8 +207,12 @@ impl Instance {
         for (_idx, (edge_idx, entry_idx)) in &self.node_incidences[node_idx.idx()] {
             self.edge_incidences[edge_idx.idx()].delete(entry_idx.idx());
             match self.edge_degree(*edge_idx) {
-                0 => { self.degree_1_edges.remove(edge_idx); }
-                1 => { self.degree_1_edges.insert(*edge_idx); }
+                0 => {
+                    self.degree_1_edges.remove(edge_idx);
+                }
+                1 => {
+                    self.degree_1_edges.insert(*edge_idx);
+                }
                 _ => {}
             }
         }
@@ -215,13 +242,18 @@ impl Instance {
         for (_idx, (edge_idx, entry_idx)) in self.node_incidences[node_idx.idx()].iter().rev() {
             self.edge_incidences[edge_idx.idx()].restore(entry_idx.idx());
             match self.edge_degree(*edge_idx) {
-                1 => { self.degree_1_edges.insert(*edge_idx); }
-                2 => { self.degree_1_edges.remove(edge_idx); }
-                _ => {},
+                1 => {
+                    self.degree_1_edges.insert(*edge_idx);
+                }
+                2 => {
+                    self.degree_1_edges.remove(edge_idx);
+                }
+                _ => {}
             }
         }
         self.nodes.restore(node_idx.idx());
-        self.node_degrees.set(node_idx.idx(), self.node_degree(node_idx) as u32);
+        self.node_degrees
+            .set(node_idx.idx(), self.node_degree(node_idx) as u32);
     }
 
     /// Restores a previously deleted edge.

@@ -161,6 +161,18 @@ impl<T> SkipVec<T> {
         self.len as usize
     }
 
+    pub fn first(&self) -> Option<usize> {
+        self.first.idx_if_valid()
+    }
+
+    pub fn next(&self, idx: usize) -> Option<usize> {
+        self.entries[idx].next.idx_if_valid()
+    }
+
+    pub fn prev(&self, idx: usize) -> Option<usize> {
+        self.entries[idx].prev.idx_if_valid()
+    }
+
     /// Delete the item with the given index.
     ///
     /// This can corrupt the list if the item was already deleted.
