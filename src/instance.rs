@@ -138,6 +138,10 @@ impl Instance {
         self.node_incidences.len()
     }
 
+    pub fn num_edges_total(&self) -> usize {
+        self.edge_incidences.len()
+    }
+
     /// Edges incident to a node, sorted by increasing indices.
     pub fn node<'a>(
         &'a self,

@@ -85,7 +85,7 @@ impl SubsetTrie {
             num_nodes,
             nexts: vec![SmallMap::new(num_nodes)],
             is_set: vec![false],
-            stack: Vec::new(),
+            stack: Vec::with_capacity(num_nodes),
         }
     }
 
@@ -144,11 +144,11 @@ impl SubsetTrie {
 }
 
 impl SupersetTrie {
-    fn new() -> Self {
+    fn new(num_edges: usize) -> Self {
         Self {
             nexts: vec![BTreeMap::new()],
             is_set: vec![false],
-            stack: Vec::new(),
+            stack: Vec::with_capacity(num_edges),
         }
     }
 
@@ -253,7 +253,7 @@ fn prune_redundant_nodes(instance: &mut Instance, reduction: &mut Reduction) -> 
     let mut nodes = instance.nodes().to_vec();
     nodes.sort_unstable_by_key(|&node| Reverse(instance.node_degree(node)));
 
-    let mut trie = SupersetTrie::new();
+    let mut trie = SupersetTrie::new(instance.num_edges_total());
     let mut num_kept = 0;
     for idx in 0..nodes.len() {
         let node = nodes[idx];
