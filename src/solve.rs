@@ -18,6 +18,7 @@ pub struct Stats {
 struct State<R: Rng> {
     rng: R,
     incomplete_hs: Vec<NodeIdx>,
+    discarded: Vec<NodeIdx>,
     best_known: Vec<NodeIdx>,
     activities: Activities<R>,
     stats: Stats,
@@ -27,6 +28,7 @@ struct State<R: Rng> {
 #[allow(clippy::module_name_repetitions)]
 pub struct SolveResult {
     pub hs_size: usize,
+    pub greedy_size: usize,
     pub solve_time: f64,
     pub stats: Stats,
 }
@@ -71,7 +73,9 @@ fn branch_on(node: NodeIdx, instance: &mut Instance, state: &mut State<impl Rng>
     if state.rng.gen() {
         instance.delete_node(node);
         state.activities.delete(node);
+        state.discarded.push(node);
         solve_recursive(instance, state);
+        state.discarded.pop();
         instance.delete_incident_edges(node);
         state.incomplete_hs.push(node);
         solve_recursive(instance, state);
@@ -87,7 +91,9 @@ fn branch_on(node: NodeIdx, instance: &mut Instance, state: &mut State<impl Rng>
         solve_recursive(instance, state);
         state.incomplete_hs.pop();
         instance.restore_incident_edges(node);
+        state.discarded.push(node);
         solve_recursive(instance, state);
+        state.discarded.pop();
         instance.restore_node(node);
         state.activities.restore(node);
     }
@@ -125,8 +131,36 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
     }
 
     if can_prune(instance, state) {
-        for &node in &state.incomplete_hs {
-            state.activities.boost_activity(node, 1.0);
+        #[allow(clippy::cast_precision_loss)]
+        #[cfg(not(feature = "split-activity"))]
+        let boost = if cfg!(feature = "relative-activity") {
+            1.0 / state.incomplete_hs.len() as f32
+        } else {
+            1.0
+        };
+
+        #[allow(clippy::cast_precision_loss)]
+        #[cfg(feature = "split-activity")]
+        let boost = if cfg!(feature = "relative-activity") {
+            let depth = state.incomplete_hs.len() + state.discarded.len();
+            1.0 / depth as f32
+        } else {
+            1.0
+        };
+
+        if !cfg!(feature = "disable-activity") {
+            for &node in &state.incomplete_hs {
+                #[cfg(feature = "split-activity")]
+                state.activities.boost_activity(node, (boost, 0.0));
+
+                #[cfg(not(feature = "split-activity"))]
+                state.activities.boost_activity(node, boost);
+            }
+
+            #[cfg(feature = "split-activity")]
+            for &node in &state.discarded {
+                state.activities.boost_activity(node, (0.0, boost));
+            }
         }
     } else if let Some((_edge, node)) = instance.degree_1_edge() {
         instance.delete_node(node);
@@ -164,10 +198,12 @@ pub fn solve(instance: &mut Instance, mut rng: impl Rng + SeedableRng) -> Result
     subsuperset::prune(instance, &mut stats);
     info!("Initial reduction time: {:.2?}", stats.subsuper_prune_time);
     let approx = greedy_approx(instance);
+    let greedy_size = approx.len();
     let activities = Activities::new(instance, &mut rng)?;
     let mut state = State {
         rng,
         incomplete_hs: vec![],
+        discarded: vec![],
         best_known: approx,
         activities,
         stats,
@@ -185,6 +221,7 @@ pub fn solve(instance: &mut Instance, mut rng: impl Rng + SeedableRng) -> Result
     );
     Ok(SolveResult {
         hs_size: state.best_known.len(),
+        greedy_size,
         solve_time: solve_time.as_secs_f64(),
         stats: state.stats,
     })

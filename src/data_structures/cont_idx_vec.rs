@@ -12,7 +12,7 @@ create_idx_struct!(DataIdx);
 ///    However, the order of the indices themselves is not fixed.
 ///  * O(1) deletion and restoration given an index
 ///
-/// This is achieved by a index to position indirection table. Deletion/
+/// This is achieved by an index to position indirection table. Deletion/
 /// restoration is implemented by swapping, partitioning the deleted elements
 /// after all non-deleted.
 #[derive(Debug, Clone)]
