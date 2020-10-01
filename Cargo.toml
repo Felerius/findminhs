@@ -6,11 +6,12 @@ edition = "2018"
 
 [features]
 debug-skipvec = []
-disable-activity = []
-relative-activity = []
-split-activity = []
-split-activity-max = []
-split-activity-sum = []
+activity-disable = []
+activity-relative = []
+activity-positive-only = []
+activity-negative-only = []
+activity-sum = []
+activity-max = []
 
 [dependencies]
 anyhow = "1.0"

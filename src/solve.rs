@@ -20,7 +20,7 @@ struct State<R: Rng> {
     incomplete_hs: Vec<NodeIdx>,
     discarded: Vec<NodeIdx>,
     best_known: Vec<NodeIdx>,
-    activities: Activities<R>,
+    activities: Activities,
     stats: Stats,
 }
 
@@ -132,37 +132,23 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
 
     if can_prune(instance, state) {
         #[allow(clippy::cast_precision_loss)]
-        #[cfg(not(feature = "split-activity"))]
-        let boost = if cfg!(feature = "relative-activity") {
-            1.0 / state.incomplete_hs.len() as f32
-        } else {
-            1.0
-        };
-
-        #[allow(clippy::cast_precision_loss)]
-        #[cfg(feature = "split-activity")]
-        let boost = if cfg!(feature = "relative-activity") {
+        let bump = if cfg!(feature = "relative-activity") {
             let depth = state.incomplete_hs.len() + state.discarded.len();
-            1.0 / depth as f32
+            1.0 / depth as f64
         } else {
             1.0
         };
 
         if !cfg!(feature = "disable-activity") {
             for &node in &state.incomplete_hs {
-                #[cfg(feature = "split-activity")]
-                state.activities.boost_activity(node, (boost, 0.0));
-
-                #[cfg(not(feature = "split-activity"))]
-                state.activities.boost_activity(node, boost);
+                state.activities.bump(node, (bump, 0.0));
             }
 
-            #[cfg(feature = "split-activity")]
             for &node in &state.discarded {
-                state.activities.boost_activity(node, (0.0, boost));
+                state.activities.bump(node, (0.0, bump));
             }
 
-            state.activities.decay_all();
+            state.activities.decay();
         }
     } else if let Some((_edge, node)) = instance.degree_1_edge() {
         instance.delete_node(node);
@@ -193,14 +179,14 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
     }
 }
 
-pub fn solve(instance: &mut Instance, mut rng: impl Rng + SeedableRng) -> Result<SolveResult> {
+pub fn solve(instance: &mut Instance, rng: impl Rng + SeedableRng) -> Result<SolveResult> {
     let time_start = Instant::now();
     let mut stats = Stats::default();
     subsuperset::prune(instance, &mut stats);
     info!("Initial reduction time: {:.2?}", stats.subsuper_prune_time);
     let approx = greedy_approx(instance);
     let greedy_size = approx.len();
-    let activities = Activities::new(instance, &mut rng)?;
+    let activities = Activities::new(instance);
     let mut state = State {
         rng,
         incomplete_hs: vec![],

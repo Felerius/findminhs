@@ -1,53 +1,59 @@
 use derivative::Derivative;
 use std::fmt::Debug;
 use std::iter::FromIterator;
-use std::mem;
 
 pub trait SegTreeOp {
     type Item;
-    type Lazy;
-
-    fn apply(item: &mut Self::Item, lazy: Option<&mut Self::Lazy>, upper: &Self::Lazy);
 
     fn combine(left: &Self::Item, right: &Self::Item) -> Self::Item;
-
-    fn no_lazy() -> Self::Lazy;
 }
 
 #[derive(Derivative)]
-#[derivative(Debug(bound = "O::Item: Debug, O::Lazy: Debug"))]
-#[derivative(Clone(bound = "O::Item: Clone, O::Lazy: Clone"))]
+#[derivative(Debug(bound = "O::Item: Debug"))]
+#[derivative(Clone(bound = "O::Item: Clone"))]
 pub struct SegTree<O: SegTreeOp> {
     data: Vec<O::Item>,
-    lazy: Vec<O::Lazy>,
+}
+
+fn left_child(index: usize) -> usize {
+    2 * index + 1
+}
+
+fn right_child(index: usize) -> usize {
+    2 * index + 2
+}
+
+fn parent(index: usize) -> usize {
+    (index - 1) / 2
 }
 
 impl<O: SegTreeOp> SegTree<O> {
-    fn recalc_at(&mut self, index: usize) {
-        self.data[index] = O::combine(&self.data[2 * index], &self.data[2 * index + 1]);
+    fn first_leaf(&self) -> usize {
+        self.data.len() / 2
     }
 
-    fn push(&mut self, index: usize) {
-        let len = self.lazy.len();
-        let height = 64 - (len as u64).leading_zeros();
-        for shift in (1..=height).rev() {
-            let idx = index >> shift;
-            if idx == 0 {
-                continue;
-            }
-            let (head, tail) = self.lazy.split_at_mut(idx + 1);
-            O::apply(&mut self.data[2 * idx], tail.get_mut(idx - 1), &head[idx]);
-            O::apply(&mut self.data[2 * idx + 1], tail.get_mut(idx), &head[idx]);
-            head[idx] = O::no_lazy();
-        }
+    fn recalc_at(&mut self, index: usize) {
+        self.data[index] = O::combine(
+            &self.data[left_child(index)],
+            &self.data[right_child(index)],
+        );
     }
 
     pub fn change(&mut self, mut index: usize, op: impl FnOnce(&mut O::Item)) {
-        index += self.lazy.len();
-        self.push(index);
+        index += self.first_leaf();
         op(&mut self.data[index]);
-        while index > 1 {
-            index /= 2;
+        while index > 0 {
+            index = parent(index);
+            self.recalc_at(index);
+        }
+    }
+
+    pub fn change_all(&mut self, mut op: impl FnMut(&mut O::Item)) {
+        let first_leaf = self.first_leaf();
+        for item in self.data[first_leaf..].iter_mut().rev() {
+            op(item);
+        }
+        for index in (0..first_leaf).rev() {
             self.recalc_at(index);
         }
     }
@@ -57,11 +63,7 @@ impl<O: SegTreeOp> SegTree<O> {
     }
 
     pub fn root(&self) -> &O::Item {
-        &self.data[1]
-    }
-
-    pub fn apply_to_all(&mut self, lazy: &O::Lazy) {
-        O::apply(&mut self.data[1], self.lazy.get_mut(1), lazy);
+        &self.data[0]
     }
 }
 
@@ -70,22 +72,18 @@ where
     O::Item: Default,
 {
     fn from_iter<T: IntoIterator<Item = O::Item>>(iter: T) -> Self {
-        let iter = iter.into_iter();
-        let mut data: Vec<_> = iter.collect();
+        // Build tree bottom to top in reversed heap order so that we can push
+        // new nodes to the back of the vec.
+        let mut data: Vec<_> = iter.into_iter().collect();
         let len = data.len();
-        assert!(len > 0, "SegTree cannot be initialized empty");
-        data.reserve_exact(len);
-        for idx in 0..len {
-            let val = mem::take(&mut data[idx]);
-            data.push(val);
+        let tree_size = 2 * len - 1;
+        data.resize_with(tree_size, Default::default);
+        data.rotate_right(tree_size - len);
+
+        for index in (0..(len - 1)).rev() {
+            data[index] = O::combine(&data[left_child(index)], &data[right_child(index)]);
         }
 
-        let mut lazy = Vec::with_capacity(len);
-        lazy.resize_with(len, O::no_lazy);
-        let mut tree = SegTree { data, lazy };
-        for index in (1..len).rev() {
-            tree.recalc_at(index);
-        }
-        tree
+        Self { data }
     }
 }

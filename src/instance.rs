@@ -27,15 +27,10 @@ pub struct Instance {
 
 impl SegTreeOp for NodeDegreeOp {
     type Item = u32;
-    type Lazy = ();
-
-    fn apply(_: &mut Self::Item, _: Option<&mut Self::Lazy>, _: &Self::Lazy) {}
 
     fn combine(left: &Self::Item, right: &Self::Item) -> Self::Item {
         *left.max(right)
     }
-
-    fn no_lazy() -> Self::Lazy {}
 }
 
 impl Instance {

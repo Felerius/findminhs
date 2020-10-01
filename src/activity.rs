@@ -1,17 +1,9 @@
 use crate::data_structures::segtree::{SegTree, SegTreeOp};
 use crate::instance::{Instance, NodeIdx};
 use crate::small_indices::SmallIdx;
-use anyhow::Result;
 use log::trace;
-use rand::{Rng, SeedableRng};
 use std::cmp::Ordering;
 use std::hint::unreachable_unchecked;
-
-/// Activities which differ by less than this are considered equal
-const ACTIVITY_EQ_EPSILON: f32 = 0.000_001;
-
-/// Factor by which activities are decayed.
-const ACTIVITY_DECAY_FACTOR: f32 = 0.99;
 
 #[derive(Debug)]
 struct ActivitySegTreeOp;
@@ -19,12 +11,7 @@ struct ActivitySegTreeOp;
 #[derive(Debug, Copy, Clone, Default)]
 struct SegTreeItem {
     /// Activity of the associated node.
-    #[cfg(not(feature = "split-activity"))]
-    activity: f32,
-
-    /// Activity of the associated node.
-    #[cfg(feature = "split-activity")]
-    activity: (f32, f32),
+    activity: (f64, f64),
 
     /// Which node this item belongs to.
     ///
@@ -32,37 +19,35 @@ struct SegTreeItem {
     /// way a deleted node can still receive activity boosts without being
     /// considered for the node with the most activity.
     node_idx: NodeIdx,
-
-    /// Random value used to tiebreak equal activities.
-    ///
-    /// This is rerolled whenever a nodes activity changes.
-    tiebreak: u32,
 }
 
-fn choose(left: f32, left_tiebreak: u32, left_idx: NodeIdx, right: f32, right_tiebreak: u32, right_idx: NodeIdx) -> bool {
-    if !left_idx.valid() {
-        true
-    } else if !right_idx.valid() {
-        false
-    } else if (left - right).abs() < ACTIVITY_EQ_EPSILON {
-        right_tiebreak > left_tiebreak
-    } else {
-        // We only ever add and multiply with constants, so we should never
-        // have any NaN's. Check in debug mode, optimize release mode under
-        // the above assumption.
-        match left.partial_cmp(&right) {
-            None => {
-                if cfg!(debug) {
-                    panic!("Activity value was set to NaN")
-                } else {
-                    unsafe { unreachable_unchecked() }
-                }
-            }
-            Some(Ordering::Less) | Some(Ordering::Equal) => true,
-            Some(Ordering::Greater) => false,
-        }
-    }
+#[cfg(feature = "activity-positive-only")]
+fn combine_activity(pos: f64, _neg: f64) -> f64 {
+    pos
 }
+
+#[cfg(feature = "activity-negative-only")]
+fn combine_activity(_pos: f64, neg: f64) -> f64 {
+    neg
+}
+
+#[cfg(feature = "activity-sum")]
+fn combine_activity(pos: f64, neg: f64) -> f64 {
+    pos + neg
+}
+
+#[cfg(feature = "activity-max")]
+fn combine_activity(pos: f64, neg: f64) -> f64 {
+    cmp::max(pos, neg)
+}
+
+#[cfg(not(any(
+    feature = "activity-positive-only",
+    feature = "activity-negative-only",
+    feature = "activity-sum",
+    feature = "activity-max"
+)))]
+compile_error!("No activity combinator function selected");
 
 /// Implements a segment tree for activities.
 ///
@@ -75,67 +60,49 @@ fn choose(left: f32, left_tiebreak: u32, left_idx: NodeIdx, right: f32, right_ti
 /// All operations work in O(log n), where n is the number of nodes.
 impl SegTreeOp for ActivitySegTreeOp {
     type Item = SegTreeItem;
-    type Lazy = f32;
 
-    #[cfg(not(feature = "split-activity"))]
-    fn apply(item: &mut Self::Item, lazy: Option<&mut Self::Lazy>, upper: &Self::Lazy) {
-        item.activity *= upper;
-        if let Some(lazy) = lazy {
-            *lazy *= upper;
-        }
-    }
-
-    #[cfg(feature = "split-activity")]
-    fn apply(item: &mut Self::Item, lazy: Option<&mut Self::Lazy>, upper: &Self::Lazy) {
-        item.activity.0 *= upper;
-        item.activity.1 *= upper;
-        if let Some(lazy) = lazy {
-            *lazy *= upper;
-        }
-    }
-
-    #[cfg(not(feature = "split-activity"))]
     fn combine(left: &Self::Item, right: &Self::Item) -> Self::Item {
-        if choose(left.activity, left.tiebreak, left.node_idx, right.activity, right.tiebreak, right.node_idx) {
-            *right
-        } else {
-            *left
+        if !left.node_idx.valid() {
+            return *right;
         }
-    }
-
-    #[cfg(feature = "split-activity")]
-    fn combine(left: &Self::Item, right: &Self::Item) -> Self::Item {
-        let (left_activity, right_activity) = if cfg!(feature = "split-activity-max") {
-            (left.activity.0.max(left.activity.1), right.activity.0.max(right.activity.1))
-        } else if cfg!(feature = "split-activity-sum") {
-            (left.activity.0 + left.activity.1, right.activity.0 + right.activity.1)
-        } else {
-            panic!("No activity combinator chosen")
-        };
-        if choose(left_activity, left.tiebreak, left.node_idx, right_activity, right.tiebreak, right.node_idx) {
-            *right
-        } else {
-            *left
+        if !right.node_idx.valid() {
+            return *left;
         }
-    }
 
-    fn no_lazy() -> Self::Lazy {
-        0.0
+        let left_combined = combine_activity(left.activity.0, left.activity.1);
+        let right_combined = combine_activity(right.activity.0, right.activity.1);
+
+        // We only ever add and multiply with constants, so we should never
+        // have any NaN's. Check in debug mode, optimize release mode under
+        // the above assumption.
+        match left_combined.partial_cmp(&right_combined) {
+            None => {
+                if cfg!(debug) {
+                    panic!("Activity value was set to NaN")
+                } else {
+                    unsafe { unreachable_unchecked() }
+                }
+            }
+            Some(Ordering::Less) | Some(Ordering::Equal) => *left,
+            Some(Ordering::Greater) => *right,
+        }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Activities<R: Rng> {
+pub struct Activities {
+    bump_factor: f64,
     activities: SegTree<ActivitySegTreeOp>,
-    rng: R,
 }
 
-impl<R: Rng> Activities<R> {
-    pub fn new(instance: &Instance, seed_rng: impl Rng) -> Result<Self>
-    where
-        R: SeedableRng,
-    {
-        let mut rng = R::from_rng(seed_rng)?;
+impl Activities {
+    /// Factor by which activities are decayed.
+    const DECAY_FACTOR: f64 = 0.99;
+
+    /// Threshold for resetting the bump factor
+    const RECALC_THRESHOLD: f64 = 1e100;
+
+    pub fn new(instance: &Instance) -> Self {
         let activities = (0..instance.num_nodes_total())
             .map(NodeIdx::from)
             .map(|idx| {
@@ -145,41 +112,37 @@ impl<R: Rng> Activities<R> {
                     idx
                 };
                 SegTreeItem {
-                    #[cfg(feature = "split-activity")]
                     activity: (0.0, 0.0),
-                    #[cfg(not(feature = "split-activity"))]
-                    activity: 0.0,
                     node_idx,
-                    tiebreak: rng.gen(),
                 }
             })
             .collect();
-        Ok(Self { activities, rng })
+        Self {
+            bump_factor: 1.0,
+            activities,
+        }
     }
 
-    pub fn decay_all(&mut self) {
+    pub fn decay(&mut self) {
         trace!("Decaying all");
-        self.activities.apply_to_all(&ACTIVITY_DECAY_FACTOR);
+        self.bump_factor /= Self::DECAY_FACTOR;
+        if self.bump_factor >= Self::RECALC_THRESHOLD {
+            trace!("Resetting bump amount");
+            let bump_factor = self.bump_factor;
+            self.activities.change_all(move |item| {
+                item.activity.0 /= bump_factor;
+                item.activity.1 /= bump_factor;
+            });
+            self.bump_factor = 1.0;
+        }
     }
 
-    #[cfg(not(feature = "split-activity"))]
-    pub fn boost_activity(&mut self, node_idx: NodeIdx, amount: f32) {
-        trace!("Boosting {} by {}", node_idx, amount);
-        let new_tiebreak = self.rng.gen();
+    pub fn bump(&mut self, node_idx: NodeIdx, amount: (f64, f64)) {
+        trace!("Bumping {} by {:?}", node_idx, amount);
+        let bump_factor = self.bump_factor;
         self.activities.change(node_idx.idx(), |item| {
-            item.activity += amount;
-            item.tiebreak = new_tiebreak;
-        });
-    }
-
-    #[cfg(feature = "split-activity")]
-    pub fn boost_activity(&mut self, node_idx: NodeIdx, amount: (f32, f32)) {
-        trace!("Boosting {} by {:?}", node_idx, amount);
-        let new_tiebreak = self.rng.gen();
-        self.activities.change(node_idx.idx(), |item| {
-            item.activity.0 += amount.0;
-            item.activity.1 += amount.1;
-            item.tiebreak = new_tiebreak;
+            item.activity.0 += amount.0 * bump_factor;
+            item.activity.1 += amount.1 * bump_factor;
         });
     }
 
