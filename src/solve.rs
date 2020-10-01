@@ -161,6 +161,8 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
             for &node in &state.discarded {
                 state.activities.boost_activity(node, (0.0, boost));
             }
+
+            state.activities.decay_all();
         }
     } else if let Some((_edge, node)) = instance.degree_1_edge() {
         instance.delete_node(node);
@@ -185,7 +187,6 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
         branch_on(node, instance, state);
     }
 
-    state.activities.decay_all();
     reduction.restore(instance);
     for node in reduction.nodes() {
         state.activities.restore(node);
