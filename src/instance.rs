@@ -9,9 +9,9 @@ use std::io::BufRead;
 use std::mem;
 use std::time::Instant;
 
-create_idx_struct!(NodeIdx);
-create_idx_struct!(EdgeIdx);
-create_idx_struct!(EntryIdx);
+create_idx_struct!(pub NodeIdx);
+create_idx_struct!(pub EdgeIdx);
+create_idx_struct!(pub EntryIdx);
 
 struct NodeDegreeOp;
 

@@ -38,9 +38,9 @@ pub trait SmallIdx:
 /// Creates an index struct that uses a `u32` to store the index.
 #[macro_export]
 macro_rules! create_idx_struct {
-    ($name:ident) => {
+    ($vis:vis $name:ident) => {
         #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
-        pub struct $name(u32);
+        $vis struct $name(u32);
 
         impl $crate::small_indices::SmallIdx for $name {
             #[allow(dead_code)]

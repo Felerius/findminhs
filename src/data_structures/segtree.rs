@@ -1,3 +1,5 @@
+use crate::create_idx_struct;
+use crate::small_indices::SmallIdx;
 use derivative::Derivative;
 use std::fmt::Debug;
 use std::iter::FromIterator;
@@ -15,16 +17,24 @@ pub struct SegTree<O: SegTreeOp> {
     data: Vec<O::Item>,
 }
 
-fn left_child(index: usize) -> usize {
-    2 * index + 1
-}
+create_idx_struct!(HeapIdx);
 
-fn right_child(index: usize) -> usize {
-    2 * index + 2
-}
+impl HeapIdx {
+    fn left(self) -> Self {
+        Self::from(2 * self.0 + 1)
+    }
 
-fn parent(index: usize) -> usize {
-    (index - 1) / 2
+    fn right(self) -> Self {
+        Self::from(2 * self.0 + 2)
+    }
+
+    fn parent(self) -> Self {
+        Self::from((self.0 - 1) / 2)
+    }
+
+    fn has_parent(self) -> bool {
+        self.0 > 0
+    }
 }
 
 impl<O: SegTreeOp> SegTree<O> {
@@ -32,18 +42,18 @@ impl<O: SegTreeOp> SegTree<O> {
         self.data.len() / 2
     }
 
-    fn recalc_at(&mut self, index: usize) {
-        self.data[index] = O::combine(
-            &self.data[left_child(index)],
-            &self.data[right_child(index)],
+    fn recalc_at(&mut self, index: HeapIdx) {
+        self.data[index.idx()] = O::combine(
+            &self.data[index.left().idx()],
+            &self.data[index.right().idx()],
         );
     }
 
-    pub fn change(&mut self, mut index: usize, op: impl FnOnce(&mut O::Item)) {
-        index += self.first_leaf();
-        op(&mut self.data[index]);
-        while index > 0 {
-            index = parent(index);
+    pub fn change(&mut self, index: usize, op: impl FnOnce(&mut O::Item)) {
+        let mut index = HeapIdx::from(index + self.first_leaf());
+        op(&mut self.data[index.idx()]);
+        while index.has_parent() {
+            index = index.parent();
             self.recalc_at(index);
         }
     }
@@ -53,7 +63,7 @@ impl<O: SegTreeOp> SegTree<O> {
         for item in self.data[first_leaf..].iter_mut().rev() {
             op(item);
         }
-        for index in (0..first_leaf).rev() {
+        for index in (0..first_leaf).map(HeapIdx::from).rev() {
             self.recalc_at(index);
         }
     }
@@ -72,16 +82,14 @@ where
     O::Item: Default,
 {
     fn from_iter<T: IntoIterator<Item = O::Item>>(iter: T) -> Self {
-        // Build tree bottom to top in reversed heap order so that we can push
-        // new nodes to the back of the vec.
         let mut data: Vec<_> = iter.into_iter().collect();
         let len = data.len();
         let tree_size = 2 * len - 1;
         data.resize_with(tree_size, Default::default);
         data.rotate_right(tree_size - len);
 
-        for index in (0..(len - 1)).rev() {
-            data[index] = O::combine(&data[left_child(index)], &data[right_child(index)]);
+        for index in (0..(len - 1)).map(HeapIdx::from).rev() {
+            data[index.idx()] = O::combine(&data[index.left().idx()], &data[index.right().idx()]);
         }
 
         Self { data }
