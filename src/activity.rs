@@ -55,15 +55,6 @@ fn combine_activity(_pos: f64, _neg: f64) -> f64 {
 )))]
 compile_error!("No activity combinator function selected");
 
-/// Implements a segment tree for activities.
-///
-/// It can:
-///   * Report the node with the maximum activity. If the activities of two
-///     nodes differs by less than `ACTIVITY_EQ_EPSILON`, they are considered
-///     equal and the reported one is chosen randomly using an rng.
-///   * Decay all activities by a factor.
-///   * Add activity to a node.
-/// All operations work in O(log n), where n is the number of nodes.
 impl SegTreeOp for ActivitySegTreeOp {
     type Item = SegTreeItem;
 
@@ -89,8 +80,8 @@ impl SegTreeOp for ActivitySegTreeOp {
                     unsafe { unreachable_unchecked() }
                 }
             }
-            Some(Ordering::Less) | Some(Ordering::Equal) => *left,
-            Some(Ordering::Greater) => *right,
+            Some(Ordering::Greater) | Some(Ordering::Equal) => *left,
+            Some(Ordering::Less) => *right,
         }
     }
 }
