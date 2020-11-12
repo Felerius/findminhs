@@ -41,19 +41,13 @@ fn combine_activity(pos: f64, neg: f64) -> f64 {
     pos.max(neg)
 }
 
-#[cfg(feature = "activity-disable")]
-fn combine_activity(_pos: f64, _neg: f64) -> f64 {
-    0.0
-}
-
 #[cfg(not(any(
     feature = "activity-positive-only",
     feature = "activity-negative-only",
     feature = "activity-sum",
     feature = "activity-max",
-    feature = "activity-disable",
 )))]
-compile_error!("No activity combinator function selected");
+compile_error!("No activity combinator function selected while activity is enabled");
 
 impl SegTreeOp for ActivitySegTreeOp {
     type Item = SegTreeItem;

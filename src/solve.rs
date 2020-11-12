@@ -1,9 +1,12 @@
+#[cfg(not(feature = "activity-disable"))]
 use crate::activity::Activities;
 use crate::instance::{Instance, NodeIdx};
 use crate::reductions::{self, Reduction};
 use crate::small_indices::SmallIdx;
 use anyhow::Result;
 use log::{debug, info, trace, warn};
+#[cfg(feature = "activity-disable")]
+use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 use std::time::{Duration, Instant};
 
@@ -29,7 +32,9 @@ struct State<R: Rng> {
     /// Smallest known HS
     smallest_known: Vec<NodeIdx>,
 
+    #[cfg(not(feature = "activity-disable"))]
     activities: Activities,
+
     stats: Stats,
 }
 
@@ -82,6 +87,8 @@ fn branch_on(node_idx: NodeIdx, instance: &mut Instance, state: &mut State<impl 
     trace!("Branching on {}", node_idx);
 
     instance.delete_node(node_idx);
+
+    #[cfg(not(feature = "activity-disable"))]
     state.activities.delete(node_idx);
 
     // Randomize branching order
@@ -107,6 +114,7 @@ fn branch_on(node_idx: NodeIdx, instance: &mut Instance, state: &mut State<impl 
         }
     }
 
+    #[cfg(not(feature = "activity-disable"))]
     state.activities.restore(node_idx);
     instance.restore_node(node_idx);
 }
@@ -130,6 +138,8 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
     } else {
         Reduction::default()
     };
+
+    #[cfg(not(feature = "activity-disable"))]
     for removed_node_idx in reduction.nodes() {
         state.activities.delete(removed_node_idx)
     }
@@ -152,7 +162,8 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
 
     if lower_bound(instance, state.partial_hs.len()) >= smallest_known_size {
         // Instance unsolvable or lower bound exceeds best known size
-        if !cfg!(feature = "activity-disable") {
+        #[cfg(not(feature = "activity-disable"))]
+        {
             #[allow(clippy::cast_precision_loss)]
             let bump_amount = if cfg!(feature = "activity-relative") {
                 let depth = state.partial_hs.len() + state.discarded.len();
@@ -185,19 +196,19 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
             );
         }
     } else {
-        let node = if cfg!(feature = "activity-disable") {
-            use rand::seq::SliceRandom;
-            *instance
-                .nodes()
-                .choose(&mut state.rng)
-                .expect("Check for no nodes failed")
-        } else {
-            state.activities.highest()
-        };
+        #[cfg(feature = "activity-disable")]
+        let node = *instance
+            .nodes()
+            .choose(&mut state.rng)
+            .expect("Check for no nodes failed");
+        #[cfg(not(feature = "activity-disable"))]
+        let node = state.activities.highest();
         branch_on(node, instance, state);
     }
 
     reduction.restore(instance, &mut state.partial_hs);
+
+    #[cfg(not(feature = "activity-disable"))]
     for node in reduction.nodes() {
         state.activities.restore(node);
     }
@@ -211,6 +222,7 @@ pub fn solve(mut instance: Instance, rng: impl Rng + SeedableRng) -> Result<Solv
         taken: Vec::new(),
         discarded: Vec::new(),
         smallest_known: Vec::new(),
+        #[cfg(not(feature = "activity-disable"))]
         activities: Activities::new(instance.num_nodes_total()),
         stats: Stats::default(),
     };
@@ -222,6 +234,8 @@ pub fn solve(mut instance: Instance, rng: impl Rng + SeedableRng) -> Result<Solv
         |_, _| false,
     );
     info!("Initial reduction time: {:.2?}", state.stats.reduction_time);
+
+    #[cfg(not(feature = "activity-disable"))]
     for node_idx in initial_reduction.nodes() {
         state.activities.delete(node_idx);
     }

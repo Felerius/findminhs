@@ -14,6 +14,7 @@ use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use structopt::StructOpt;
 
+#[cfg(not(feature = "activity-disable"))]
 mod activity;
 mod data_structures;
 mod instance;
@@ -42,7 +43,7 @@ struct CsvRecord {
     greedy_size: usize,
     solve_time: f64,
     iterations: usize,
-    subsuper_prune_time: f64,
+    reduction_time: f64,
 }
 
 impl CsvRecord {
@@ -60,7 +61,7 @@ impl CsvRecord {
             greedy_size: results.greedy_size,
             solve_time: results.solve_time,
             iterations: results.stats.iterations,
-            subsuper_prune_time: results.stats.reduction_time.as_secs_f64(),
+            reduction_time: results.stats.reduction_time.as_secs_f64(),
         })
     }
 }
