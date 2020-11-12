@@ -1,8 +1,7 @@
 use crate::activity::Activities;
 use crate::instance::{Instance, NodeIdx};
+use crate::reductions::{self, Reduction};
 use crate::small_indices::SmallIdx;
-use crate::subsuperset;
-use crate::subsuperset::Reduction;
 use anyhow::Result;
 use log::{debug, info, trace, warn};
 use rand::{Rng, SeedableRng};
@@ -11,15 +10,25 @@ use std::time::{Duration, Instant};
 #[derive(Debug, Clone, Default)]
 pub struct Stats {
     pub iterations: usize,
-    pub subsuper_prune_time: Duration,
+    pub reduction_time: Duration,
 }
 
 #[derive(Debug, Clone)]
 struct State<R: Rng> {
     rng: R,
-    incomplete_hs: Vec<NodeIdx>,
+
+    /// All nodes in the partial HS, including those added by reductions
+    partial_hs: Vec<NodeIdx>,
+
+    /// All nodes added to the partial HS as a branching decision
+    taken: Vec<NodeIdx>,
+
+    /// All nodes discarded as a branching decision
     discarded: Vec<NodeIdx>,
-    best_known: Vec<NodeIdx>,
+
+    /// Smallest known HS
+    smallest_known: Vec<NodeIdx>,
+
     activities: Activities,
     stats: Stats,
 }
@@ -33,9 +42,10 @@ pub struct SolveResult {
     pub stats: Stats,
 }
 
-fn greedy_approx(instance: &mut Instance) -> Vec<NodeIdx> {
+fn greedy_approx(instance: &mut Instance, base_hs: Vec<NodeIdx>) -> Vec<NodeIdx> {
     let time_start = Instant::now();
-    let mut hs = vec![];
+    let initial_size = base_hs.len();
+    let mut hs = base_hs;
     while !instance.edges().is_empty() {
         let mut max_degree = (0, NodeIdx::INVALID);
         for &node in instance.nodes() {
@@ -45,7 +55,7 @@ fn greedy_approx(instance: &mut Instance) -> Vec<NodeIdx> {
         instance.delete_incident_edges(max_degree.1);
         hs.push(max_degree.1);
     }
-    for &node in hs.iter().rev() {
+    for &node in hs[initial_size..].iter().rev() {
         instance.restore_incident_edges(node);
         instance.restore_node(node);
     }
@@ -57,111 +67,125 @@ fn greedy_approx(instance: &mut Instance) -> Vec<NodeIdx> {
     hs
 }
 
-fn can_prune(instance: &Instance, state: &State<impl Rng>) -> bool {
+fn lower_bound(instance: &Instance, partial_size: usize) -> usize {
     let max_node_degree = instance.max_node_degree();
     let num_edges = instance.num_edges();
-    debug_assert!(max_node_degree > 0);
+    if max_node_degree == 0 {
+        // Instance already solved
+        return partial_size;
+    }
     let rem_lower_bound = (num_edges + max_node_degree - 1) / max_node_degree;
-    let lower_bound = state.incomplete_hs.len() + rem_lower_bound;
-    lower_bound >= state.best_known.len()
+    partial_size + rem_lower_bound
 }
 
-fn branch_on(node: NodeIdx, instance: &mut Instance, state: &mut State<impl Rng>) {
-    trace!("Branching on {}", node);
+fn branch_on(node_idx: NodeIdx, instance: &mut Instance, state: &mut State<impl Rng>) {
+    trace!("Branching on {}", node_idx);
+
+    instance.delete_node(node_idx);
+    state.activities.delete(node_idx);
 
     // Randomize branching order
-    if state.rng.gen() {
-        instance.delete_node(node);
-        state.activities.delete(node);
-        state.discarded.push(node);
-        solve_recursive(instance, state);
-        state.discarded.pop();
-        instance.delete_incident_edges(node);
-        state.incomplete_hs.push(node);
-        solve_recursive(instance, state);
-        state.incomplete_hs.pop();
-        instance.restore_incident_edges(node);
-        instance.restore_node(node);
-        state.activities.restore(node);
-    } else {
-        instance.delete_node(node);
-        state.activities.delete(node);
-        instance.delete_incident_edges(node);
-        state.incomplete_hs.push(node);
-        solve_recursive(instance, state);
-        state.incomplete_hs.pop();
-        instance.restore_incident_edges(node);
-        state.discarded.push(node);
-        solve_recursive(instance, state);
-        state.discarded.pop();
-        instance.restore_node(node);
-        state.activities.restore(node);
+    let take_first: bool = state.rng.gen();
+    for &take in &[take_first, !take_first] {
+        if take {
+            instance.delete_incident_edges(node_idx);
+            state.partial_hs.push(node_idx);
+            state.taken.push(node_idx);
+
+            solve_recursive(instance, state);
+
+            debug_assert_eq!(state.taken.last().copied(), Some(node_idx));
+            state.taken.pop();
+            debug_assert_eq!(state.partial_hs.last().copied(), Some(node_idx));
+            state.partial_hs.pop();
+            instance.restore_incident_edges(node_idx);
+        } else {
+            state.discarded.push(node_idx);
+            solve_recursive(instance, state);
+            debug_assert_eq!(state.discarded.last().copied(), Some(node_idx));
+            state.discarded.pop();
+        }
     }
+
+    state.activities.restore(node_idx);
+    instance.restore_node(node_idx);
 }
 
 fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
-    if instance.edges().is_empty() {
-        if state.incomplete_hs.len() < state.best_known.len() {
-            info!("Found HS of size {}", state.incomplete_hs.len());
-            state.best_known.truncate(state.incomplete_hs.len());
-            state.best_known.copy_from_slice(&state.incomplete_hs);
-        } else {
-            warn!(
-                "Found HS larger than best known ({} vs. {}), should have been pruned",
-                state.incomplete_hs.len(),
-                state.best_known.len()
-            );
-        }
-        return;
-    }
-
-    // Don't count the last iteration where we find a new best HS, since they
-    // are comparatively very cheap
     state.stats.iterations += 1;
+    let smallest_known_size = state.smallest_known.len();
 
-    // Don't prune on the first iteration, we already do it before calculating
-    // the greedy approximation
+    // Don't run reductions on the first iteration, we already do so before
+    // calculating the greedy approximation
     let reduction = if state.stats.iterations > 1 {
-        subsuperset::prune(instance, &mut state.stats)
+        reductions::reduce(
+            instance,
+            &mut state.partial_hs,
+            &mut state.stats,
+            |instance, partial_hs| match instance.min_edge_degree().map(|(deg, _idx)| deg) {
+                None | Some(0) => true,
+                _ => lower_bound(instance, partial_hs.len()) >= smallest_known_size,
+            },
+        )
     } else {
         Reduction::default()
     };
-    for node in reduction.nodes() {
-        state.activities.delete(node);
+    for removed_node_idx in reduction.nodes() {
+        state.activities.delete(removed_node_idx)
     }
 
-    if can_prune(instance, state) {
-        #[allow(clippy::cast_precision_loss)]
-        let bump = if cfg!(feature = "relative-activity") {
-            let depth = state.incomplete_hs.len() + state.discarded.len();
-            1.0 / depth as f64
-        } else {
-            1.0
-        };
+    if instance.edges().is_empty() {
+        // Instance is solved
+        if state.partial_hs.len() < smallest_known_size {
+            let bound = lower_bound(instance, state.partial_hs.len());
+            if bound >= smallest_known_size {
+                log::error!(
+                    "Have smaller hs ({} vs. {}), but lower bound signals abort ({} vs. {})",
+                    state.partial_hs.len(),
+                    smallest_known_size,
+                    bound,
+                    smallest_known_size
+                );
+            }
+        }
+    }
 
-        if !cfg!(feature = "disable-activity") {
-            for &node in &state.incomplete_hs {
-                state.activities.bump(node, (bump, 0.0));
+    if lower_bound(instance, state.partial_hs.len()) >= smallest_known_size {
+        // Instance unsolvable or lower bound exceeds best known size
+        if !cfg!(feature = "activity-disable") {
+            #[allow(clippy::cast_precision_loss)]
+            let bump_amount = if cfg!(feature = "activity-relative") {
+                let depth = state.partial_hs.len() + state.discarded.len();
+                1.0 / depth as f64
+            } else {
+                1.0
+            };
+
+            for &node in &state.partial_hs {
+                state.activities.bump(node, (bump_amount, 0.0));
             }
 
             for &node in &state.discarded {
-                state.activities.bump(node, (0.0, bump));
+                state.activities.bump(node, (0.0, bump_amount));
             }
 
             state.activities.decay();
         }
-    } else if let Some((_edge, node)) = instance.degree_1_edge() {
-        instance.delete_node(node);
-        instance.delete_incident_edges(node);
-        state.activities.delete(node);
-        state.incomplete_hs.push(node);
-        solve_recursive(instance, state);
-        state.incomplete_hs.pop();
-        state.activities.restore(node);
-        instance.restore_incident_edges(node);
-        instance.restore_node(node);
+    } else if instance.edges().is_empty() {
+        // Instance is solved
+        if state.partial_hs.len() < smallest_known_size {
+            info!("Found HS of size {}", state.partial_hs.len());
+            state.smallest_known.truncate(state.partial_hs.len());
+            state.smallest_known.copy_from_slice(&state.partial_hs);
+        } else {
+            warn!(
+                "Found HS is not smaller than best known ({} vs. {}), should have been pruned",
+                state.partial_hs.len(),
+                state.smallest_known.len()
+            );
+        }
     } else {
-        let node = if cfg!(feature = "disable-activity") {
+        let node = if cfg!(feature = "activity-disable") {
             use rand::seq::SliceRandom;
             *instance
                 .nodes()
@@ -173,41 +197,53 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
         branch_on(node, instance, state);
     }
 
-    reduction.restore(instance);
+    reduction.restore(instance, &mut state.partial_hs);
     for node in reduction.nodes() {
         state.activities.restore(node);
     }
 }
 
-pub fn solve(instance: &mut Instance, rng: impl Rng + SeedableRng) -> Result<SolveResult> {
+pub fn solve(mut instance: Instance, rng: impl Rng + SeedableRng) -> Result<SolveResult> {
     let time_start = Instant::now();
-    let mut stats = Stats::default();
-    subsuperset::prune(instance, &mut stats);
-    info!("Initial reduction time: {:.2?}", stats.subsuper_prune_time);
-    let approx = greedy_approx(instance);
-    let greedy_size = approx.len();
-    let activities = Activities::new(instance);
     let mut state = State {
         rng,
-        incomplete_hs: vec![],
-        discarded: vec![],
-        best_known: approx,
-        activities,
-        stats,
+        partial_hs: Vec::new(),
+        taken: Vec::new(),
+        discarded: Vec::new(),
+        smallest_known: Vec::new(),
+        activities: Activities::new(instance.num_nodes_total()),
+        stats: Stats::default(),
     };
-    solve_recursive(instance, &mut state);
+
+    let initial_reduction = reductions::reduce(
+        &mut instance,
+        &mut state.partial_hs,
+        &mut state.stats,
+        |_, _| false,
+    );
+    info!("Initial reduction time: {:.2?}", state.stats.reduction_time);
+    for node_idx in initial_reduction.nodes() {
+        state.activities.delete(node_idx);
+    }
+
+    state.smallest_known = greedy_approx(&mut instance, state.partial_hs.clone());
+    let greedy_size = state.smallest_known.len();
+
+    solve_recursive(&mut instance, &mut state);
     let solve_time = Instant::now() - time_start;
+
     info!(
         "Solving took {} iterations ({:.2?})",
         state.stats.iterations, solve_time
     );
     debug!(
         "Final HS (size {}): {:?}",
-        state.best_known.len(),
-        &state.best_known
+        state.smallest_known.len(),
+        &state.smallest_known
     );
+
     Ok(SolveResult {
-        hs_size: state.best_known.len(),
+        hs_size: state.smallest_known.len(),
         greedy_size,
         solve_time: solve_time.as_secs_f64(),
         stats: state.stats,

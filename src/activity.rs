@@ -1,5 +1,5 @@
 use crate::data_structures::segtree::{SegTree, SegTreeOp};
-use crate::instance::{Instance, NodeIdx};
+use crate::instance::NodeIdx;
 use crate::small_indices::SmallIdx;
 use log::trace;
 use std::cmp::Ordering;
@@ -38,14 +38,20 @@ fn combine_activity(pos: f64, neg: f64) -> f64 {
 
 #[cfg(feature = "activity-max")]
 fn combine_activity(pos: f64, neg: f64) -> f64 {
-    cmp::max(pos, neg)
+    pos.max(neg)
+}
+
+#[cfg(feature = "activity-disable")]
+fn combine_activity(_pos: f64, _neg: f64) -> f64 {
+    0.0
 }
 
 #[cfg(not(any(
     feature = "activity-positive-only",
     feature = "activity-negative-only",
     feature = "activity-sum",
-    feature = "activity-max"
+    feature = "activity-max",
+    feature = "activity-disable",
 )))]
 compile_error!("No activity combinator function selected");
 
@@ -102,19 +108,11 @@ impl Activities {
     /// Threshold for resetting the bump factor
     const RECALC_THRESHOLD: f64 = 1e100;
 
-    pub fn new(instance: &Instance) -> Self {
-        let activities = (0..instance.num_nodes_total())
-            .map(NodeIdx::from)
-            .map(|idx| {
-                let node_idx = if instance.is_node_deleted(idx) {
-                    NodeIdx::INVALID
-                } else {
-                    idx
-                };
-                SegTreeItem {
-                    activity: (0.0, 0.0),
-                    node_idx,
-                }
+    pub fn new(num_nodes: usize) -> Self {
+        let activities = (0..num_nodes)
+            .map(|idx| SegTreeItem {
+                activity: (0.0, 0.0),
+                node_idx: NodeIdx::from(idx),
             })
             .collect();
         Self {
@@ -129,7 +127,7 @@ impl Activities {
         if self.bump_factor >= Self::RECALC_THRESHOLD {
             trace!("Resetting bump amount");
             let bump_factor = self.bump_factor;
-            self.activities.change_all(move |item| {
+            self.activities.change_all(|item| {
                 item.activity.0 /= bump_factor;
                 item.activity.1 /= bump_factor;
             });

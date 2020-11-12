@@ -1,5 +1,5 @@
 use fxhash::FxHasher32;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 use std::hash::{BuildHasherDefault, Hash};
 
@@ -93,9 +93,6 @@ macro_rules! create_idx_struct {
 }
 
 type Fx32HashBuilder = BuildHasherDefault<FxHasher32>;
-
-/// Hash set with optimized hash function for small indices.
-pub type IdxHashSet<I> = HashSet<I, Fx32HashBuilder>;
 
 /// Hash map with optimized hash function for small indices.
 pub type IdxHashMap<I, V> = HashMap<I, V, Fx32HashBuilder>;

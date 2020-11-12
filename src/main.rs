@@ -17,9 +17,9 @@ use structopt::StructOpt;
 mod activity;
 mod data_structures;
 mod instance;
+mod reductions;
 mod small_indices;
 mod solve;
-mod subsuperset;
 
 /// Minimum hitting set solver
 #[derive(Debug, StructOpt)]
@@ -60,7 +60,7 @@ impl CsvRecord {
             greedy_size: results.greedy_size,
             solve_time: results.solve_time,
             iterations: results.stats.iterations,
-            subsuper_prune_time: results.stats.subsuper_prune_time.as_secs_f64(),
+            subsuper_prune_time: results.stats.reduction_time.as_secs_f64(),
         })
     }
 }
@@ -74,12 +74,12 @@ fn main() -> Result<()> {
     info!("Solving {:?}", &opts.input_file);
 
     let file = BufReader::new(File::open(&opts.input_file)?);
-    let mut instance = Instance::load(file)?;
+    let instance = Instance::load(file)?;
 
     let seed: u64 = OsRng.gen();
-    info!("RNG seed: {}", seed);
+    info!("RNG seed: {:#018x}", seed);
     let rng = rand_pcg::Pcg64Mcg::seed_from_u64(seed);
-    let results = solve::solve(&mut instance, rng)?;
+    let results = solve::solve(instance, rng)?;
     info!("Smallest HS has size {}", results.hs_size);
 
     if let Some(csv_file) = opts.csv {
