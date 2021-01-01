@@ -2,7 +2,7 @@
 use crate::activity::Activities;
 use crate::instance::{Instance, NodeIdx};
 use crate::reductions::{self, Reduction};
-use crate::small_indices::SmallIdx;
+use crate::small_indices::{SmallIdx, IdxHashSet};
 use anyhow::Result;
 use log::{debug, info, trace, warn};
 #[cfg(feature = "activity-disable")]
@@ -255,6 +255,16 @@ pub fn solve(mut instance: Instance, rng: impl Rng + SeedableRng) -> Result<Solv
         state.smallest_known.len(),
         &state.smallest_known
     );
+
+    info!("Validating found hitting set");
+    initial_reduction.restore(&mut instance, &mut state.partial_hs);
+    let hs_set: IdxHashSet<_> = state.smallest_known.iter().copied().collect();
+    assert_eq!(instance.num_nodes_total(), instance.nodes().len());
+    assert_eq!(instance.num_edges_total(), instance.edges().len());
+    for &edge_idx in instance.edges() {
+        let hit = instance.edge(edge_idx).any(|node_idx| hs_set.contains(&node_idx));
+        assert!(hit, "edge {} not hit", edge_idx);
+    }
 
     Ok(SolveResult {
         hs_size: state.smallest_known.len(),
