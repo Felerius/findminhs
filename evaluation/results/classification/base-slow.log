@@ -1,0 +1,155 @@
+[2020-12-03T13:44:58.064Z INFO  findminhs] Solving "./instances/cm/cost_matrix_component_nr_493_size_263_cutoff_10.0.cm.dat"
+[2020-12-03T13:44:58.065Z INFO  findminhs] Solving "./instances/cm/cost_matrix_component_nr_209_size_160_cutoff_10.0.cm.dat"
+[2020-12-03T13:44:58.081Z INFO  findminhs] Solving "./instances/cm/cost_matrix_component_nr_123_size_148_cutoff_10.0.cm.dat"
+[2020-12-03T13:44:58.082Z INFO  findminhs] Solving "./instances/cm/cost_matrix_component_nr_130_size_289_cutoff_10.0.cm.dat"
+[2020-12-03T13:44:58.082Z INFO  findminhs] Solving "./instances/cm/cost_matrix_component_nr_92_size_194_cutoff_10.0.cm.dat"
+[2020-12-03T13:44:58.083Z INFO  findminhs] Solving "./instances/cm/cost_matrix_component_nr_241_size_252_cutoff_10.0.cm.dat"
+[2020-12-03T13:44:58.083Z INFO  findminhs] Solving "./instances/cm/cost_matrix_component_nr_118_size_204_cutoff_10.0.cm.dat"
+[2020-12-03T13:44:58.083Z INFO  findminhs] Solving "./instances/cm/cost_matrix_component_nr_163_size_122_cutoff_10.0.cm.dat"
+[2020-12-03T13:44:58.083Z INFO  findminhs] Solving "./instances/cm/cost_matrix_component_nr_758_size_127_cutoff_10.0.cm.dat"
+[2020-12-03T13:44:58.086Z INFO  findminhs] Solving "./instances/cm/cost_matrix_component_nr_487_size_113_cutoff_10.0.cm.dat"
+[2020-12-03T13:44:58.089Z INFO  findminhs::instance] Loaded instance with 204 nodes, 6068 edges in 5.12ms
+[2020-12-03T13:44:58.090Z INFO  findminhs::instance] Loaded instance with 160 nodes, 11511 edges in 10.24ms
+[2020-12-03T13:44:58.090Z INFO  findminhs] Solving "./instances/cm/cost_matrix_component_nr_43_size_345_cutoff_10.0.cm.dat"
+[2020-12-03T13:44:58.091Z INFO  findminhs] RNG seed: 0x4ead980bee396790
+[2020-12-03T13:44:58.091Z INFO  findminhs] RNG seed: 0x1c882800d69d3b07
+[2020-12-03T13:44:58.092Z INFO  findminhs::instance] Loaded instance with 113 nodes, 5832 edges in 4.67ms
+[2020-12-03T13:44:58.093Z INFO  findminhs::instance] Loaded instance with 127 nodes, 10563 edges in 9.55ms
+[2020-12-03T13:44:58.094Z INFO  findminhs] Solving "./instances/cm/cost_matrix_component_nr_54_size_279_cutoff_10.0.cm.dat"
+[2020-12-03T13:44:58.094Z INFO  findminhs] RNG seed: 0xe18d6d30a4579ea1
+[2020-12-03T13:44:58.094Z INFO  findminhs] RNG seed: 0xa6375ac252723aec
+[2020-12-03T13:44:58.096Z INFO  findminhs] Solving "./instances/cm/cost_matrix_component_nr_525_size_215_cutoff_10.0.cm.dat"
+[2020-12-03T13:44:58.098Z INFO  findminhs::instance] Loaded instance with 122 nodes, 22427 edges in 14.09ms
+[2020-12-03T13:44:58.101Z INFO  findminhs::instance] Loaded instance with 194 nodes, 31674 edges in 17.52ms
+[2020-12-03T13:44:58.107Z INFO  findminhs::instance] Loaded instance with 148 nodes, 50346 edges in 23.40ms
+[2020-12-03T13:44:58.117Z INFO  findminhs] RNG seed: 0x3513cc7f7d635773
+[2020-12-03T13:44:58.118Z INFO  findminhs] RNG seed: 0xdcd73d8896cdba79
+[2020-12-03T13:44:58.118Z INFO  findminhs] RNG seed: 0x25ca9eec25295d98
+[2020-12-03T13:44:58.119Z INFO  findminhs] Solving "./instances/cm/cost_matrix_component_nr_1751_size_144_cutoff_10.0.cm.dat"
+[2020-12-03T13:44:58.119Z INFO  findminhs] Solving "./instances/cm/cost_matrix_component_nr_95_size_134_cutoff_10.0.cm.dat"
+[2020-12-03T13:44:58.120Z INFO  findminhs] Solving "./instances/cm/cost_matrix_component_nr_789_size_150_cutoff_10.0.cm.dat"
+[2020-12-03T13:44:58.120Z INFO  findminhs] Solving "./instances/cm/cost_matrix_component_nr_279_size_209_cutoff_10.0.cm.dat"
+[2020-12-03T13:44:58.120Z INFO  findminhs] Solving "./instances/cm/cost_matrix_component_nr_74_size_223_cutoff_10.0.cm.dat"
+[2020-12-03T13:44:58.120Z INFO  findminhs] Solving "./instances/cm/cost_matrix_component_nr_385_size_217_cutoff_10.0.cm.dat"
+[2020-12-03T13:44:58.121Z INFO  findminhs] Solving "./instances/cm/cost_matrix_component_nr_794_size_163_cutoff_10.0.cm.dat"
+[2020-12-03T13:44:58.123Z INFO  findminhs::instance] Loaded instance with 134 nodes, 5265 edges in 2.59ms
+[2020-12-03T13:44:58.123Z INFO  findminhs] RNG seed: 0xdcd88a20c1555577
+[2020-12-03T13:44:58.128Z INFO  findminhs::instance] Loaded instance with 163 nodes, 9746 edges in 6.89ms
+[2020-12-03T13:44:58.129Z INFO  findminhs] RNG seed: 0x10d293a36d0c859e
+[2020-12-03T13:44:58.132Z INFO  findminhs::instance] Loaded instance with 144 nodes, 19952 edges in 11.74ms
+[2020-12-03T13:44:58.132Z INFO  findminhs] RNG seed: 0xd1692fedee813687
+[2020-12-03T13:44:58.141Z INFO  findminhs::instance] Loaded instance with 215 nodes, 30335 edges in 23.18ms
+[2020-12-03T13:44:58.141Z INFO  findminhs] RNG seed: 0xe8ccddf471941ff8
+[2020-12-03T13:44:58.142Z INFO  findminhs::solve] Initial reduction time: 47.84ms
+[2020-12-03T13:44:58.145Z INFO  findminhs::solve] Initial reduction time: 54.12ms
+[2020-12-03T13:44:58.150Z INFO  findminhs::solve] Greedy hs of size 54 (7.46ms)
+[2020-12-03T13:44:58.153Z INFO  findminhs::solve] Greedy hs of size 58 (8.14ms)
+[2020-12-03T13:44:58.155Z INFO  findminhs::solve] Initial reduction time: 60.85ms
+[2020-12-03T13:44:58.157Z INFO  findminhs::solve] Initial reduction time: 33.91ms
+[2020-12-03T13:44:58.158Z INFO  findminhs::solve] Greedy hs of size 52 (3.02ms)
+[2020-12-03T13:44:58.160Z INFO  findminhs::solve] Initial reduction time: 30.89ms
+[2020-12-03T13:44:58.160Z INFO  findminhs::instance] Loaded instance with 150 nodes, 102600 edges in 40.14ms
+[2020-12-03T13:44:58.160Z INFO  findminhs::solve] Greedy hs of size 55 (3.13ms)
+[2020-12-03T13:44:58.161Z INFO  findminhs] RNG seed: 0xdeaadbb1ca72f635
+[2020-12-03T13:44:58.167Z INFO  findminhs::solve] Greedy hs of size 57 (7.51ms)
+[2020-12-03T13:44:58.179Z INFO  findminhs::instance] Loaded instance with 263 nodes, 312823 edges in 114.01ms
+[2020-12-03T13:44:58.180Z INFO  findminhs] RNG seed: 0xbf1ddd7278526e09
+[2020-12-03T13:44:58.189Z INFO  findminhs::solve] Initial reduction time: 98.25ms
+[2020-12-03T13:44:58.193Z INFO  findminhs::solve] Greedy hs of size 69 (3.17ms)
+[2020-12-03T13:44:58.195Z INFO  findminhs::solve] Initial reduction time: 62.49ms
+[2020-12-03T13:44:58.204Z INFO  findminhs::solve] Found HS of size 50
+[2020-12-03T13:44:58.217Z INFO  findminhs::solve] Greedy hs of size 57 (22.11ms)
+[2020-12-03T13:44:58.217Z INFO  findminhs::instance] Loaded instance with 223 nodes, 268663 edges in 96.52ms
+[2020-12-03T13:44:58.218Z INFO  findminhs] RNG seed: 0x347d31db7aa6bfa9
+[2020-12-03T13:44:58.223Z INFO  findminhs::instance] Loaded instance with 217 nodes, 154823 edges in 101.64ms
+[2020-12-03T13:44:58.223Z INFO  findminhs::solve] Found HS of size 49
+[2020-12-03T13:44:58.223Z INFO  findminhs] RNG seed: 0xbe024e3ff3142e7b
+[2020-12-03T13:44:58.251Z INFO  findminhs::instance] Loaded instance with 345 nodes, 438869 edges in 159.47ms
+[2020-12-03T13:44:58.251Z INFO  findminhs] RNG seed: 0xc6fb578f5b401127
+[2020-12-03T13:44:58.284Z INFO  findminhs::solve] Initial reduction time: 166.08ms
+[2020-12-03T13:44:58.293Z INFO  findminhs::solve] Initial reduction time: 175.48ms
+[2020-12-03T13:44:58.304Z INFO  findminhs::instance] Loaded instance with 209 nodes, 296831 edges in 183.37ms
+[2020-12-03T13:44:58.305Z INFO  findminhs] RNG seed: 0x146ce9027feb0db6
+[2020-12-03T13:44:58.312Z INFO  findminhs::solve] Greedy hs of size 66 (28.01ms)
+[2020-12-03T13:44:58.317Z INFO  findminhs::solve] Initial reduction time: 199.02ms
+[2020-12-03T13:44:58.321Z INFO  findminhs::instance] Loaded instance with 289 nodes, 578725 edges in 237.12ms
+[2020-12-03T13:44:58.321Z INFO  findminhs] RNG seed: 0xb5234526d29ee14b
+[2020-12-03T13:44:58.323Z INFO  findminhs::solve] Greedy hs of size 69 (29.84ms)
+[2020-12-03T13:44:58.323Z INFO  findminhs::instance] Loaded instance with 252 nodes, 669157 edges in 239.28ms
+[2020-12-03T13:44:58.324Z INFO  findminhs] RNG seed: 0x8ce596cf41f37e6d
+[2020-12-03T13:44:58.360Z INFO  findminhs::solve] Initial reduction time: 218.91ms
+[2020-12-03T13:44:58.364Z INFO  findminhs::solve] Greedy hs of size 74 (47.88ms)
+[2020-12-03T13:44:58.408Z INFO  findminhs::solve] Greedy hs of size 65 (47.77ms)
+[2020-12-03T13:44:58.486Z INFO  findminhs::solve] Initial reduction time: 325.46ms
+[2020-12-03T13:44:58.487Z INFO  findminhs::instance] Loaded instance with 279 nodes, 717093 edges in 392.49ms
+[2020-12-03T13:44:58.488Z INFO  findminhs] RNG seed: 0x7aae32c58471d012
+[2020-12-03T13:44:58.533Z INFO  findminhs::solve] Found HS of size 56
+[2020-12-03T13:44:58.592Z INFO  findminhs::solve] Found HS of size 57
+[2020-12-03T13:44:58.592Z INFO  findminhs::solve] Greedy hs of size 96 (105.75ms)
+[2020-12-03T13:44:58.747Z INFO  findminhs::solve] Initial reduction time: 523.62ms
+[2020-12-03T13:44:58.761Z INFO  findminhs::solve] Found HS of size 55
+[2020-12-03T13:44:58.974Z INFO  findminhs::solve] Greedy hs of size 87 (227.29ms)
+[2020-12-03T13:44:58.999Z INFO  findminhs::solve] Initial reduction time: 781.46ms
+[2020-12-03T13:44:59.181Z INFO  findminhs::solve] Initial reduction time: 693.38ms
+[2020-12-03T13:44:59.218Z INFO  findminhs::solve] Initial reduction time: 913.31ms
+[2020-12-03T13:44:59.252Z INFO  findminhs::solve] Initial reduction time: 928.87ms
+[2020-12-03T13:44:59.293Z INFO  findminhs::solve] Greedy hs of size 111 (293.85ms)
+[2020-12-03T13:44:59.800Z INFO  findminhs::solve] Greedy hs of size 122 (582.06ms)
+[2020-12-03T13:44:59.888Z INFO  findminhs::solve] Initial reduction time: 1.71s
+[2020-12-03T13:45:00.327Z INFO  findminhs::solve] Found HS of size 108
+[2020-12-03T13:45:00.349Z INFO  findminhs::solve] Found HS of size 107
+[2020-12-03T13:45:00.378Z INFO  findminhs::solve] Greedy hs of size 90 (489.75ms)
+[2020-12-03T13:45:00.398Z INFO  findminhs::solve] Greedy hs of size 123 (1.22s)
+[2020-12-03T13:45:00.531Z INFO  findminhs::solve] Greedy hs of size 132 (1.28s)
+[2020-12-03T13:45:00.698Z INFO  findminhs::solve] Found HS of size 115
+[2020-12-03T13:45:01.325Z INFO  findminhs::solve] Found HS of size 114
+[2020-12-03T13:45:01.635Z INFO  findminhs::solve] Initial reduction time: 3.38s
+[2020-12-03T13:45:01.922Z INFO  findminhs::solve] Initial reduction time: 3.60s
+[2020-12-03T13:45:02.312Z INFO  findminhs::solve] Greedy hs of size 105 (676.60ms)
+[2020-12-03T13:45:02.750Z INFO  findminhs::solve] Greedy hs of size 100 (827.58ms)
+[2020-12-03T13:45:03.508Z INFO  findminhs::solve] Found HS of size 113
+[2020-12-03T13:45:21.242Z INFO  findminhs::solve] Found HS of size 68
+[2020-12-03T13:45:25.869Z INFO  findminhs::solve] Found HS of size 56
+[2020-12-03T13:47:16.911Z INFO  findminhs::solve] Found HS of size 106
+[2020-12-03T13:47:34.514Z INFO  findminhs::solve] Found HS of size 105
+[2020-12-03T13:47:43.841Z INFO  findminhs::solve] Found HS of size 56
+[2020-12-03T13:52:26.577Z INFO  findminhs::solve] Found HS of size 55
+[2020-12-03T14:00:32.185Z INFO  findminhs::solve] Found HS of size 104
+[2020-12-03T14:01:40.270Z INFO  findminhs::solve] Found HS of size 53
+[2020-12-03T14:06:51.387Z INFO  findminhs::solve] Found HS of size 48
+[2020-12-03T14:14:09.225Z INFO  findminhs::solve] Found HS of size 112
+[2020-12-03T14:26:23.706Z INFO  findminhs::solve] Found HS of size 122
+[2020-12-03T14:26:23.719Z INFO  findminhs::solve] Found HS of size 121
+[2020-12-03T15:18:39.086Z INFO  findminhs::solve] Found HS of size 73
+[2020-12-03T16:58:52.791Z INFO  findminhs::solve] Solving took 448641 iterations (11634.47s)
+[2020-12-03T16:58:52.822Z INFO  findminhs] Smallest HS has size 100
+[2020-12-03T17:02:04.057Z INFO  findminhs::solve] Solving took 15774187 iterations (11825.96s)
+[2020-12-03T17:02:04.058Z INFO  findminhs] Smallest HS has size 48
+[2020-12-03T17:45:05.799Z INFO  findminhs::solve] Found HS of size 54
+[2020-12-03T18:43:00.680Z INFO  findminhs::solve] Found HS of size 53
+[2020-12-03T18:43:58.212Z INFO  findminhs::solve] Solving took 646907 iterations (17940.03s)
+[2020-12-03T18:43:58.227Z INFO  findminhs] Smallest HS has size 90
+[2020-12-03T19:36:25.352Z INFO  findminhs::solve] Found HS of size 120
+[2020-12-03T20:09:38.187Z INFO  findminhs::solve] Solving took 1395789 iterations (23079.70s)
+[2020-12-03T20:09:38.221Z INFO  findminhs] Smallest HS has size 120
+[2020-12-03T20:11:28.486Z INFO  findminhs::solve] Found HS of size 52
+[2020-12-03T21:34:12.266Z INFO  findminhs::solve] Found HS of size 51
+[2020-12-03T21:36:25.299Z INFO  findminhs::solve] Solving took 5820373 iterations (28287.17s)
+[2020-12-03T21:36:25.301Z INFO  findminhs] Smallest HS has size 55
+[2020-12-03T22:42:08.762Z INFO  findminhs::solve] Solving took 19003071 iterations (32230.67s)
+[2020-12-03T22:42:08.763Z INFO  findminhs] Smallest HS has size 53
+[2020-12-03T23:44:46.112Z INFO  findminhs::solve] Solving took 34298865 iterations (35987.99s)
+[2020-12-03T23:44:46.112Z INFO  findminhs] Smallest HS has size 51
+[2020-12-04T01:08:14.763Z INFO  findminhs::solve] Found HS of size 131
+[2020-12-04T01:08:39.107Z INFO  findminhs::solve] Solving took 14767953 iterations (41020.78s)
+[2020-12-04T01:08:39.135Z INFO  findminhs] Smallest HS has size 131
+[2020-12-04T03:33:10.967Z INFO  findminhs::solve] Solving took 13060125 iterations (49692.84s)
+[2020-12-04T03:33:10.968Z INFO  findminhs] Smallest HS has size 55
+[2020-12-04T04:14:43.197Z INFO  findminhs::solve] Found HS of size 68
+[2020-12-04T07:02:13.873Z INFO  findminhs::solve] Solving took 71952883 iterations (62235.76s)
+[2020-12-04T07:02:13.874Z INFO  findminhs] Smallest HS has size 68
+[2020-12-04T09:49:58.888Z INFO  findminhs::solve] Found HS of size 64
+[2020-12-04T10:22:49.872Z INFO  findminhs::solve] Solving took 7043685 iterations (74271.73s)
+[2020-12-04T10:22:49.873Z INFO  findminhs] Smallest HS has size 64
+[2020-12-04T12:30:53.973Z INFO  findminhs::solve] Solving took 7123757 iterations (81955.67s)
+[2020-12-04T12:30:53.983Z INFO  findminhs] Smallest HS has size 112

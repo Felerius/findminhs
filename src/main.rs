@@ -11,7 +11,7 @@ use serde::Serialize;
 use std::ffi::OsStr;
 use std::fs::{File, OpenOptions};
 use std::io::BufReader;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use structopt::StructOpt;
 
 #[cfg(not(feature = "activity-disable"))]
@@ -47,13 +47,7 @@ struct CsvRecord {
 }
 
 impl CsvRecord {
-    fn new(input_file: impl AsRef<Path>, seed: u64, results: &SolveResult) -> Result<Self> {
-        let file_name = input_file
-            .as_ref()
-            .file_name()
-            .and_then(OsStr::to_str)
-            .ok_or_else(|| anyhow!("File name can't be extracted"))?
-            .to_string();
+    fn new(file_name: String, seed: u64, results: &SolveResult) -> Result<Self> {
         Ok(Self {
             file_name,
             seed,
@@ -74,13 +68,19 @@ fn main() -> Result<()> {
     let opts = CliOpts::from_args();
     info!("Solving {:?}", &opts.input_file);
 
+    let file_name = opts
+        .input_file
+        .file_name()
+        .and_then(OsStr::to_str)
+        .ok_or_else(|| anyhow!("File name can't be extracted"))?
+        .to_string();
     let file = BufReader::new(File::open(&opts.input_file)?);
     let instance = Instance::load(file)?;
 
     let seed: u64 = OsRng.gen();
     info!("RNG seed: {:#018x}", seed);
     let rng = rand_pcg::Pcg64Mcg::seed_from_u64(seed);
-    let results = solve::solve(instance, rng)?;
+    let results = solve::solve(instance, rng, file_name.clone())?;
     info!("Smallest HS has size {}", results.hs_size);
 
     if let Some(csv_file) = opts.csv {
@@ -92,7 +92,7 @@ fn main() -> Result<()> {
         let mut writer = WriterBuilder::new()
             .has_headers(write_header)
             .from_writer(file);
-        writer.serialize(CsvRecord::new(&opts.input_file, seed, &results)?)?;
+        writer.serialize(CsvRecord::new(file_name, seed, &results)?)?;
     }
 
     Ok(())

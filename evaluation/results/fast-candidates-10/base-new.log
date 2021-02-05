@@ -1,0 +1,160 @@
+[2021-01-15T14:12:35.693Z INFO  findminhs] Solving "./instances/murakami_uno/p95_512000.dat"
+[2021-01-15T14:12:35.693Z INFO  findminhs] Solving "./instances/murakami_uno/p9_512000.dat"
+[2021-01-15T14:12:37.416Z INFO  findminhs::instance] Loaded instance with 50 nodes, 512000 edges in 1.72s
+[2021-01-15T14:12:37.417Z INFO  findminhs] RNG seed: 0x78388a23723bd8a0
+[2021-01-15T14:12:37.585Z INFO  findminhs::instance] Loaded instance with 50 nodes, 512000 edges in 1.89s
+[2021-01-15T14:12:37.586Z INFO  findminhs] RNG seed: 0xc8a19a79564b57ab
+[2021-01-15T14:15:34.701Z INFO  findminhs::solve] Initial reduction time: 177.12s
+[2021-01-15T14:15:35.044Z INFO  findminhs::solve] Greedy hs of size 4 (342.38ms)
+[2021-01-15T14:29:34.118Z INFO  findminhs::solve] Solving took 2069 iterations (1016.53s)
+[2021-01-15T14:29:34.119Z INFO  findminhs::solve] Validating found hitting set
+[2021-01-15T14:29:35.849Z INFO  findminhs] Smallest HS has size 4
+[2021-01-15T14:33:13.426Z INFO  findminhs::solve] Initial reduction time: 1236.01s
+[2021-01-15T14:33:14.468Z INFO  findminhs::solve] Greedy hs of size 5 (1.04s)
+[2021-01-15T16:35:01.872Z INFO  findminhs::solve] Solving took 29151 iterations (8544.45s)
+[2021-01-15T16:35:01.873Z INFO  findminhs::solve] Validating found hitting set
+[2021-01-15T16:35:03.312Z INFO  findminhs] Smallest HS has size 5
+[2021-01-15T16:35:03.418Z INFO  findminhs] Solving "./instances/murakami_uno/p95_512000.dat"
+[2021-01-15T16:35:05.157Z INFO  findminhs::instance] Loaded instance with 50 nodes, 512000 edges in 1.74s
+[2021-01-15T16:35:05.158Z INFO  findminhs] RNG seed: 0xcddbdc02e9af34e7
+[2021-01-15T16:38:16.723Z INFO  findminhs::solve] Initial reduction time: 191.56s
+[2021-01-15T16:38:17.065Z INFO  findminhs::solve] Greedy hs of size 4 (341.33ms)
+[2021-01-15T16:52:57.512Z INFO  findminhs::solve] Solving took 2063 iterations (1072.35s)
+[2021-01-15T16:52:57.512Z INFO  findminhs::solve] Validating found hitting set
+[2021-01-15T16:52:59.183Z INFO  findminhs] Smallest HS has size 4
+[2021-01-15T17:03:46.314Z INFO  findminhs] Solving "./instances/murakami_uno/p95_512000.dat"
+[2021-01-15T17:03:47.820Z INFO  findminhs::instance] Loaded instance with 50 nodes, 512000 edges in 1.50s
+[2021-01-15T17:03:47.821Z INFO  findminhs] RNG seed: 0xc402fcfe455db08c
+[2021-01-15T17:07:21.802Z INFO  findminhs::solve] Initial reduction time: 213.98s
+[2021-01-15T17:07:22.498Z INFO  findminhs::solve] Greedy hs of size 4 (695.44ms)
+[2021-01-15T17:10:29.316Z INFO  findminhs] Solving "./instances/murakami_uno/p9_512000.dat"
+[2021-01-15T17:10:30.967Z INFO  findminhs::instance] Loaded instance with 50 nodes, 512000 edges in 1.65s
+[2021-01-15T17:10:30.968Z INFO  findminhs] RNG seed: 0xbdfd83c9426a1ef9
+[2021-01-15T17:21:15.920Z INFO  findminhs::solve] Solving took 2067 iterations (1048.10s)
+[2021-01-15T17:21:15.920Z INFO  findminhs::solve] Validating found hitting set
+[2021-01-15T17:21:17.791Z INFO  findminhs] Smallest HS has size 4
+[2021-01-15T17:32:31.557Z INFO  findminhs::solve] Initial reduction time: 1320.59s
+[2021-01-15T17:32:32.435Z INFO  findminhs::solve] Greedy hs of size 5 (877.81ms)
+[2021-01-15T18:29:34.902Z INFO  findminhs] Solving "./instances/murakami_uno/p95_512000.dat"
+[2021-01-15T18:29:36.409Z INFO  findminhs::instance] Loaded instance with 50 nodes, 512000 edges in 1.50s
+[2021-01-15T18:29:36.410Z INFO  findminhs] RNG seed: 0x97b9c2c9705e1b35
+[2021-01-15T18:32:56.211Z INFO  findminhs::solve] Initial reduction time: 199.80s
+[2021-01-15T18:32:56.654Z INFO  findminhs::solve] Greedy hs of size 4 (442.08ms)
+[2021-01-15T18:47:19.259Z INFO  findminhs::solve] Solving took 2065 iterations (1062.85s)
+[2021-01-15T18:47:19.260Z INFO  findminhs::solve] Validating found hitting set
+[2021-01-15T18:47:21.057Z INFO  findminhs] Smallest HS has size 4
+[2021-01-15T19:32:22.619Z INFO  findminhs::solve] Solving took 29129 iterations (8511.65s)
+[2021-01-15T19:32:22.620Z INFO  findminhs::solve] Validating found hitting set
+[2021-01-15T19:32:24.069Z INFO  findminhs] Smallest HS has size 5
+[2021-01-15T19:32:24.156Z INFO  findminhs] Solving "./instances/murakami_uno/p9_512000.dat"
+[2021-01-15T19:32:25.716Z INFO  findminhs::instance] Loaded instance with 50 nodes, 512000 edges in 1.56s
+[2021-01-15T19:32:25.717Z INFO  findminhs] RNG seed: 0xb30f2032ea55bc83
+[2021-01-15T19:52:39.979Z INFO  findminhs::solve] Initial reduction time: 1214.26s
+[2021-01-15T19:52:40.896Z INFO  findminhs::solve] Greedy hs of size 5 (915.91ms)
+[2021-01-15T21:51:02.364Z INFO  findminhs::solve] Solving took 29185 iterations (8316.65s)
+[2021-01-15T21:51:02.364Z INFO  findminhs::solve] Validating found hitting set
+[2021-01-15T21:51:03.828Z INFO  findminhs] Smallest HS has size 5
+[2021-01-16T00:09:20.555Z INFO  findminhs] Solving "./instances/murakami_uno/p95_512000.dat"
+[2021-01-16T00:09:22.076Z INFO  findminhs::instance] Loaded instance with 50 nodes, 512000 edges in 1.52s
+[2021-01-16T00:09:22.077Z INFO  findminhs] RNG seed: 0x945da4145a094344
+[2021-01-16T00:12:24.531Z INFO  findminhs::solve] Initial reduction time: 182.45s
+[2021-01-16T00:12:24.874Z INFO  findminhs::solve] Greedy hs of size 4 (341.97ms)
+[2021-01-16T00:26:31.298Z INFO  findminhs::solve] Solving took 2065 iterations (1029.22s)
+[2021-01-16T00:26:31.299Z INFO  findminhs::solve] Validating found hitting set
+[2021-01-16T00:26:33.008Z INFO  findminhs] Smallest HS has size 4
+[2021-01-16T02:16:41.238Z INFO  findminhs] Solving "./instances/murakami_uno/p9_512000.dat"
+[2021-01-16T02:16:43.042Z INFO  findminhs::instance] Loaded instance with 50 nodes, 512000 edges in 1.80s
+[2021-01-16T02:16:43.043Z INFO  findminhs] RNG seed: 0xae65f78f184eaf40
+[2021-01-16T02:37:11.346Z INFO  findminhs::solve] Initial reduction time: 1228.30s
+[2021-01-16T02:37:12.260Z INFO  findminhs::solve] Greedy hs of size 5 (913.16ms)
+[2021-01-16T03:02:21.477Z INFO  findminhs] Solving "./instances/murakami_uno/p9_512000.dat"
+[2021-01-16T03:02:23.031Z INFO  findminhs::instance] Loaded instance with 50 nodes, 512000 edges in 1.55s
+[2021-01-16T03:02:23.032Z INFO  findminhs] RNG seed: 0x0e5ad1f7c5fd0f4c
+[2021-01-16T03:25:23.546Z INFO  findminhs::solve] Initial reduction time: 1380.51s
+[2021-01-16T03:25:24.632Z INFO  findminhs::solve] Greedy hs of size 5 (1.09s)
+[2021-01-16T04:34:16.473Z INFO  findminhs::solve] Solving took 29119 iterations (8253.43s)
+[2021-01-16T04:34:16.474Z INFO  findminhs::solve] Validating found hitting set
+[2021-01-16T04:34:17.919Z INFO  findminhs] Smallest HS has size 5
+[2021-01-16T04:34:18.211Z INFO  findminhs] Solving "./instances/murakami_uno/p9_512000.dat"
+[2021-01-16T04:34:19.757Z INFO  findminhs::instance] Loaded instance with 50 nodes, 512000 edges in 1.54s
+[2021-01-16T04:34:19.758Z INFO  findminhs] RNG seed: 0x66a1576083571a3e
+[2021-01-16T04:55:22.926Z INFO  findminhs::solve] Initial reduction time: 1263.17s
+[2021-01-16T04:55:23.804Z INFO  findminhs::solve] Greedy hs of size 5 (877.11ms)
+[2021-01-16T05:25:17.814Z INFO  findminhs::solve] Solving took 29125 iterations (8574.78s)
+[2021-01-16T05:25:17.815Z INFO  findminhs::solve] Validating found hitting set
+[2021-01-16T05:25:19.277Z INFO  findminhs] Smallest HS has size 5
+[2021-01-16T06:57:15.884Z INFO  findminhs::solve] Solving took 29187 iterations (8576.13s)
+[2021-01-16T06:57:15.885Z INFO  findminhs::solve] Validating found hitting set
+[2021-01-16T06:57:17.338Z INFO  findminhs] Smallest HS has size 5
+[2021-01-16T06:57:17.440Z INFO  findminhs] Solving "./instances/murakami_uno/p9_512000.dat"
+[2021-01-16T06:57:19.015Z INFO  findminhs::instance] Loaded instance with 50 nodes, 512000 edges in 1.57s
+[2021-01-16T06:57:19.016Z INFO  findminhs] RNG seed: 0xd6fc827653fbbade
+[2021-01-16T07:20:45.000Z INFO  findminhs::solve] Initial reduction time: 1405.98s
+[2021-01-16T07:20:46.504Z INFO  findminhs::solve] Greedy hs of size 5 (1.50s)
+[2021-01-16T07:44:09.096Z INFO  findminhs] Solving "./instances/murakami_uno/p95_512000.dat"
+[2021-01-16T07:44:10.599Z INFO  findminhs::instance] Loaded instance with 50 nodes, 512000 edges in 1.50s
+[2021-01-16T07:44:10.600Z INFO  findminhs] RNG seed: 0x91595b83694203fe
+[2021-01-16T07:47:08.341Z INFO  findminhs::solve] Initial reduction time: 177.74s
+[2021-01-16T07:47:08.983Z INFO  findminhs::solve] Greedy hs of size 4 (641.44ms)
+[2021-01-16T08:01:08.992Z INFO  findminhs::solve] Solving took 2057 iterations (1018.39s)
+[2021-01-16T08:01:08.993Z INFO  findminhs::solve] Validating found hitting set
+[2021-01-16T08:01:10.809Z INFO  findminhs] Smallest HS has size 4
+[2021-01-16T08:01:10.942Z INFO  findminhs] Solving "./instances/murakami_uno/p95_512000.dat"
+[2021-01-16T08:01:12.446Z INFO  findminhs::instance] Loaded instance with 50 nodes, 512000 edges in 1.50s
+[2021-01-16T08:01:12.447Z INFO  findminhs] RNG seed: 0x17ce8e7848f4a57d
+[2021-01-16T08:04:25.257Z INFO  findminhs::solve] Initial reduction time: 192.81s
+[2021-01-16T08:04:25.596Z INFO  findminhs::solve] Greedy hs of size 4 (337.87ms)
+[2021-01-16T08:18:36.275Z INFO  findminhs::solve] Solving took 2079 iterations (1043.83s)
+[2021-01-16T08:18:36.276Z INFO  findminhs::solve] Validating found hitting set
+[2021-01-16T08:18:38.001Z INFO  findminhs] Smallest HS has size 4
+[2021-01-16T09:21:47.359Z INFO  findminhs::solve] Solving took 29109 iterations (8668.34s)
+[2021-01-16T09:21:47.360Z INFO  findminhs::solve] Validating found hitting set
+[2021-01-16T09:21:48.897Z INFO  findminhs] Smallest HS has size 5
+[2021-01-16T09:21:48.983Z INFO  findminhs] Solving "./instances/murakami_uno/p9_512000.dat"
+[2021-01-16T09:21:50.555Z INFO  findminhs::instance] Loaded instance with 50 nodes, 512000 edges in 1.57s
+[2021-01-16T09:21:50.556Z INFO  findminhs] RNG seed: 0x35310e369569f42e
+[2021-01-16T09:42:07.083Z INFO  findminhs::solve] Initial reduction time: 1216.53s
+[2021-01-16T09:42:07.973Z INFO  findminhs::solve] Greedy hs of size 5 (889.29ms)
+[2021-01-16T11:40:44.828Z INFO  findminhs::solve] Solving took 29139 iterations (8334.27s)
+[2021-01-16T11:40:44.829Z INFO  findminhs::solve] Validating found hitting set
+[2021-01-16T11:40:46.302Z INFO  findminhs] Smallest HS has size 5
+[2021-01-16T11:40:46.389Z INFO  findminhs] Solving "./instances/murakami_uno/p95_512000.dat"
+[2021-01-16T11:40:47.921Z INFO  findminhs::instance] Loaded instance with 50 nodes, 512000 edges in 1.53s
+[2021-01-16T11:40:47.922Z INFO  findminhs] RNG seed: 0x7ac6069f14421a49
+[2021-01-16T11:43:51.819Z INFO  findminhs::solve] Initial reduction time: 183.90s
+[2021-01-16T11:43:52.533Z INFO  findminhs::solve] Greedy hs of size 4 (712.80ms)
+[2021-01-16T11:58:19.466Z INFO  findminhs::solve] Solving took 2065 iterations (1051.54s)
+[2021-01-16T11:58:19.467Z INFO  findminhs::solve] Validating found hitting set
+[2021-01-16T11:58:21.293Z INFO  findminhs] Smallest HS has size 4
+[2021-01-16T11:58:21.446Z INFO  findminhs] Solving "./instances/murakami_uno/p9_512000.dat"
+[2021-01-16T11:58:23.028Z INFO  findminhs::instance] Loaded instance with 50 nodes, 512000 edges in 1.58s
+[2021-01-16T11:58:23.029Z INFO  findminhs] RNG seed: 0xb35cf1df74e89c31
+[2021-01-16T12:18:43.187Z INFO  findminhs::solve] Initial reduction time: 1220.16s
+[2021-01-16T12:18:44.297Z INFO  findminhs::solve] Greedy hs of size 5 (1.11s)
+[2021-01-16T12:52:41.060Z INFO  findminhs] Solving "./instances/murakami_uno/p9_512000.dat"
+[2021-01-16T12:52:42.622Z INFO  findminhs::instance] Loaded instance with 50 nodes, 512000 edges in 1.56s
+[2021-01-16T12:52:42.623Z INFO  findminhs] RNG seed: 0xd70ddd0d8b7f248f
+[2021-01-16T13:12:05.518Z INFO  findminhs::solve] Initial reduction time: 1162.89s
+[2021-01-16T13:12:06.813Z INFO  findminhs::solve] Greedy hs of size 5 (1.29s)
+[2021-01-16T14:17:32.389Z INFO  findminhs::solve] Solving took 29095 iterations (8349.36s)
+[2021-01-16T14:17:32.390Z INFO  findminhs::solve] Validating found hitting set
+[2021-01-16T14:17:33.856Z INFO  findminhs] Smallest HS has size 5
+[2021-01-16T15:09:51.294Z INFO  findminhs::solve] Solving took 29107 iterations (8228.67s)
+[2021-01-16T15:09:51.295Z INFO  findminhs::solve] Validating found hitting set
+[2021-01-16T15:09:52.827Z INFO  findminhs] Smallest HS has size 5
+[2021-01-16T15:09:52.942Z INFO  findminhs] Solving "./instances/murakami_uno/p95_512000.dat"
+[2021-01-16T15:09:54.443Z INFO  findminhs::instance] Loaded instance with 50 nodes, 512000 edges in 1.50s
+[2021-01-16T15:09:54.444Z INFO  findminhs] RNG seed: 0x6e5713910f82fc68
+[2021-01-16T15:12:56.420Z INFO  findminhs::solve] Initial reduction time: 181.98s
+[2021-01-16T15:12:56.773Z INFO  findminhs::solve] Greedy hs of size 4 (352.88ms)
+[2021-01-16T15:27:16.633Z INFO  findminhs::solve] Solving took 2071 iterations (1042.19s)
+[2021-01-16T15:27:16.634Z INFO  findminhs::solve] Validating found hitting set
+[2021-01-16T15:27:18.372Z INFO  findminhs] Smallest HS has size 4
+[2021-01-16T15:27:18.463Z INFO  findminhs] Solving "./instances/murakami_uno/p95_512000.dat"
+[2021-01-16T15:27:19.988Z INFO  findminhs::instance] Loaded instance with 50 nodes, 512000 edges in 1.52s
+[2021-01-16T15:27:19.989Z INFO  findminhs] RNG seed: 0xf9238b5a29a59eaa
+[2021-01-16T15:30:22.937Z INFO  findminhs::solve] Initial reduction time: 182.95s
+[2021-01-16T15:30:23.296Z INFO  findminhs::solve] Greedy hs of size 4 (358.30ms)
+[2021-01-16T15:44:25.131Z INFO  findminhs::solve] Solving took 2071 iterations (1025.14s)
+[2021-01-16T15:44:25.132Z INFO  findminhs::solve] Validating found hitting set
+[2021-01-16T15:44:27.019Z INFO  findminhs] Smallest HS has size 4

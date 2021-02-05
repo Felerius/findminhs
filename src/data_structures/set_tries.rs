@@ -37,7 +37,7 @@ pub struct SupersetTrie {
 
 impl<K: SmallIdx, V: SmallIdx> SmallMap<K, V> {
     fn new(key_range_size: usize) -> Self {
-        if key_range_size < 256 {
+        if key_range_size <= 256 {
             Self::Small(vec![V::INVALID; key_range_size])
         } else {
             Self::Large(IdxHashMap::default())
@@ -205,7 +205,7 @@ impl SupersetTrie {
         let stack_ptr = stack.as_mut_ptr();
         let capacity = stack.capacity();
         // Leak stack
-        mem::ManuallyDrop::new(stack);
+        mem::forget(stack);
         // ptr-ptr casts don't like casting lifetime params
         // (https://github.com/rust-lang/rust/issues/27214), so we need to
         // cast with one in-between stop

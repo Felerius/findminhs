@@ -2,7 +2,7 @@
 use crate::activity::Activities;
 use crate::instance::{Instance, NodeIdx};
 use crate::reductions::{self, Reduction};
-use crate::small_indices::{SmallIdx, IdxHashSet};
+use crate::small_indices::{IdxHashSet, SmallIdx};
 use anyhow::Result;
 use log::{debug, info, trace, warn};
 #[cfg(feature = "activity-disable")]
@@ -14,6 +14,7 @@ use std::time::{Duration, Instant};
 pub struct Stats {
     pub iterations: usize,
     pub reduction_time: Duration,
+    pub last_iter_log: Option<Instant>,
 }
 
 #[derive(Debug, Clone)]
@@ -36,6 +37,8 @@ struct State<R: Rng> {
     activities: Activities,
 
     stats: Stats,
+
+    instance_name: String,
 }
 
 #[derive(Debug, Clone)]
@@ -123,6 +126,19 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
     state.stats.iterations += 1;
     let smallest_known_size = state.smallest_known.len();
 
+    let now = Instant::now();
+    if state
+        .stats
+        .last_iter_log
+        .map_or(true, |inst| (now - inst).as_secs() >= 60)
+    {
+        info!(
+            "Running on {} for {} iterations",
+            &state.instance_name, state.stats.iterations
+        );
+        state.stats.last_iter_log = Some(now);
+    }
+
     // Don't run reductions on the first iteration, we already do so before
     // calculating the greedy approximation
     let reduction = if state.stats.iterations > 1 {
@@ -142,22 +158,6 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
     #[cfg(not(feature = "activity-disable"))]
     for removed_node_idx in reduction.nodes() {
         state.activities.delete(removed_node_idx)
-    }
-
-    if instance.edges().is_empty() {
-        // Instance is solved
-        if state.partial_hs.len() < smallest_known_size {
-            let bound = lower_bound(instance, state.partial_hs.len());
-            if bound >= smallest_known_size {
-                log::error!(
-                    "Have smaller hs ({} vs. {}), but lower bound signals abort ({} vs. {})",
-                    state.partial_hs.len(),
-                    smallest_known_size,
-                    bound,
-                    smallest_known_size
-                );
-            }
-        }
     }
 
     if lower_bound(instance, state.partial_hs.len()) >= smallest_known_size {
@@ -214,7 +214,11 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
     }
 }
 
-pub fn solve(mut instance: Instance, rng: impl Rng + SeedableRng) -> Result<SolveResult> {
+pub fn solve(
+    mut instance: Instance,
+    rng: impl Rng + SeedableRng,
+    instance_name: String,
+) -> Result<SolveResult> {
     let time_start = Instant::now();
     let mut state = State {
         rng,
@@ -225,6 +229,7 @@ pub fn solve(mut instance: Instance, rng: impl Rng + SeedableRng) -> Result<Solv
         #[cfg(not(feature = "activity-disable"))]
         activities: Activities::new(instance.num_nodes_total()),
         stats: Stats::default(),
+        instance_name,
     };
 
     let initial_reduction = reductions::reduce(
@@ -262,7 +267,9 @@ pub fn solve(mut instance: Instance, rng: impl Rng + SeedableRng) -> Result<Solv
     assert_eq!(instance.num_nodes_total(), instance.nodes().len());
     assert_eq!(instance.num_edges_total(), instance.edges().len());
     for &edge_idx in instance.edges() {
-        let hit = instance.edge(edge_idx).any(|node_idx| hs_set.contains(&node_idx));
+        let hit = instance
+            .edge(edge_idx)
+            .any(|node_idx| hs_set.contains(&node_idx));
         assert!(hit, "edge {} not hit", edge_idx);
     }
 
