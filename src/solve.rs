@@ -1,20 +1,25 @@
-#[cfg(not(feature = "activity-disable"))]
+#[cfg(feature = "branching-activity")]
 use crate::activity::Activities;
-use crate::instance::{Instance, NodeIdx};
-use crate::reductions::{self, Reduction};
-use crate::small_indices::{IdxHashSet, SmallIdx};
+use crate::{
+    instance::{Instance, NodeIdx},
+    reductions::{self, Reduction},
+    small_indices::{IdxHashSet, SmallIdx},
+};
 use anyhow::Result;
+use cfg_if::cfg_if;
 use log::{debug, info, trace, warn};
-#[cfg(feature = "activity-disable")]
+#[cfg(feature = "branching-random")]
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 use std::time::{Duration, Instant};
 
-#[derive(Debug, Clone, Default)]
+const ITER_LOG_GAP: u64 = 60;
+
+#[derive(Debug, Clone)]
 pub struct Stats {
     pub iterations: usize,
     pub reduction_time: Duration,
-    pub last_iter_log: Option<Instant>,
+    pub last_iter_log: Instant,
 }
 
 #[derive(Debug, Clone)]
@@ -24,16 +29,10 @@ struct State<R: Rng> {
     /// All nodes in the partial HS, including those added by reductions
     partial_hs: Vec<NodeIdx>,
 
-    /// All nodes added to the partial HS as a branching decision
-    taken: Vec<NodeIdx>,
-
-    /// All nodes discarded as a branching decision
-    discarded: Vec<NodeIdx>,
-
     /// Smallest known HS
     smallest_known: Vec<NodeIdx>,
 
-    #[cfg(not(feature = "activity-disable"))]
+    #[cfg(feature = "branching-activity")]
     activities: Activities,
 
     stats: Stats,
@@ -88,10 +87,9 @@ fn lower_bound(instance: &Instance, partial_size: usize) -> usize {
 
 fn branch_on(node_idx: NodeIdx, instance: &mut Instance, state: &mut State<impl Rng>) {
     trace!("Branching on {}", node_idx);
-
     instance.delete_node(node_idx);
 
-    #[cfg(not(feature = "activity-disable"))]
+    #[cfg(feature = "branching-activity")]
     state.activities.delete(node_idx);
 
     // Randomize branching order
@@ -100,26 +98,33 @@ fn branch_on(node_idx: NodeIdx, instance: &mut Instance, state: &mut State<impl 
         if take {
             instance.delete_incident_edges(node_idx);
             state.partial_hs.push(node_idx);
-            state.taken.push(node_idx);
+        }
 
-            solve_recursive(instance, state);
+        solve_recursive(instance, state);
 
-            debug_assert_eq!(state.taken.last().copied(), Some(node_idx));
-            state.taken.pop();
+        if take {
             debug_assert_eq!(state.partial_hs.last().copied(), Some(node_idx));
             state.partial_hs.pop();
             instance.restore_incident_edges(node_idx);
-        } else {
-            state.discarded.push(node_idx);
-            solve_recursive(instance, state);
-            debug_assert_eq!(state.discarded.last().copied(), Some(node_idx));
-            state.discarded.pop();
         }
     }
 
-    #[cfg(not(feature = "activity-disable"))]
+    #[cfg(feature = "branching-activity")]
     state.activities.restore(node_idx);
     instance.restore_node(node_idx);
+}
+
+#[allow(unused_variables)]
+fn pick_branching_node(instance: &Instance, state: &mut State<impl Rng>) -> NodeIdx {
+    cfg_if! {
+        if #[cfg(feature = "branching-activity")] {
+            state.activities.highest()
+        } else if #[cfg(feature = "branching-random")] {
+            instance.nodes().choose(&mut state.rng).expect("check for no nodes failed")
+        } else {
+            compile_error!("no branching-* feature selected")
+        }
+    }
 }
 
 fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
@@ -127,16 +132,12 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
     let smallest_known_size = state.smallest_known.len();
 
     let now = Instant::now();
-    if state
-        .stats
-        .last_iter_log
-        .map_or(true, |inst| (now - inst).as_secs() >= 60)
-    {
+    if (now - state.stats.last_iter_log).as_secs() >= ITER_LOG_GAP {
         info!(
             "Running on {} for {} iterations",
             &state.instance_name, state.stats.iterations
         );
-        state.stats.last_iter_log = Some(now);
+        state.stats.last_iter_log = now;
     }
 
     // Don't run reductions on the first iteration, we already do so before
@@ -146,8 +147,8 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
             instance,
             &mut state.partial_hs,
             &mut state.stats,
-            |instance, partial_hs| match instance.min_edge_degree().map(|(deg, _idx)| deg) {
-                None | Some(0) => true,
+            |instance, partial_hs| match instance.min_edge_degree() {
+                None | Some((0, _)) => true,
                 _ => lower_bound(instance, partial_hs.len()) >= smallest_known_size,
             },
         )
@@ -155,31 +156,18 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
         Reduction::default()
     };
 
-    #[cfg(not(feature = "activity-disable"))]
+    #[cfg(feature = "branching-activity")]
     for removed_node_idx in reduction.nodes() {
         state.activities.delete(removed_node_idx)
     }
 
     if lower_bound(instance, state.partial_hs.len()) >= smallest_known_size {
         // Instance unsolvable or lower bound exceeds best known size
-        #[cfg(not(feature = "activity-disable"))]
+        #[cfg(feature = "branching-activity")]
         {
-            #[allow(clippy::cast_precision_loss)]
-            let bump_amount = if cfg!(feature = "activity-relative") {
-                let depth = state.partial_hs.len() + state.discarded.len();
-                1.0 / depth as f64
-            } else {
-                1.0
-            };
-
             for &node in &state.partial_hs {
-                state.activities.bump(node, (bump_amount, 0.0));
+                state.activities.bump(node);
             }
-
-            for &node in &state.discarded {
-                state.activities.bump(node, (0.0, bump_amount));
-            }
-
             state.activities.decay();
         }
     } else if instance.edges().is_empty() {
@@ -196,19 +184,13 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
             );
         }
     } else {
-        #[cfg(feature = "activity-disable")]
-        let node = *instance
-            .nodes()
-            .choose(&mut state.rng)
-            .expect("Check for no nodes failed");
-        #[cfg(not(feature = "activity-disable"))]
-        let node = state.activities.highest();
+        let node = pick_branching_node(instance, state);
         branch_on(node, instance, state);
     }
 
     reduction.restore(instance, &mut state.partial_hs);
 
-    #[cfg(not(feature = "activity-disable"))]
+    #[cfg(feature = "branching-activity")]
     for node in reduction.nodes() {
         state.activities.restore(node);
     }
@@ -223,12 +205,14 @@ pub fn solve(
     let mut state = State {
         rng,
         partial_hs: Vec::new(),
-        taken: Vec::new(),
-        discarded: Vec::new(),
         smallest_known: Vec::new(),
-        #[cfg(not(feature = "activity-disable"))]
+        #[cfg(feature = "branching-activity")]
         activities: Activities::new(instance.num_nodes_total()),
-        stats: Stats::default(),
+        stats: Stats {
+            iterations: 0,
+            reduction_time: Duration::default(),
+            last_iter_log: Instant::now(),
+        },
         instance_name,
     };
 
@@ -240,7 +224,7 @@ pub fn solve(
     );
     info!("Initial reduction time: {:.2?}", state.stats.reduction_time);
 
-    #[cfg(not(feature = "activity-disable"))]
+    #[cfg(feature = "branching-activity")]
     for node_idx in initial_reduction.nodes() {
         state.activities.delete(node_idx);
     }

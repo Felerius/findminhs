@@ -1,20 +1,20 @@
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(clippy::similar_names, clippy::cast_possible_truncation)]
-use crate::instance::Instance;
-use crate::solve::SolveResult;
+use crate::{instance::Instance, solve::SolveResult};
 use anyhow::{anyhow, Result};
 use csv::WriterBuilder;
 use log::info;
-use rand::rngs::OsRng;
-use rand::{Rng, SeedableRng};
+use rand::{rngs::OsRng, Rng, SeedableRng};
 use serde::Serialize;
-use std::ffi::OsStr;
-use std::fs::{File, OpenOptions};
-use std::io::BufReader;
-use std::path::PathBuf;
+use std::{
+    ffi::OsStr,
+    fs::{File, OpenOptions},
+    io::BufReader,
+    path::PathBuf,
+};
 use structopt::StructOpt;
 
-#[cfg(not(feature = "activity-disable"))]
+#[cfg(feature = "branching-activity")]
 mod activity;
 mod data_structures;
 mod instance;

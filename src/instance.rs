@@ -140,20 +140,20 @@ impl Instance {
     }
 
     /// Edges incident to a node, sorted by increasing indices.
-    pub fn node<'a>(
-        &'a self,
+    pub fn node(
+        &self,
         node_idx: NodeIdx,
-    ) -> impl Iterator<Item = EdgeIdx> + ExactSizeIterator + Clone + 'a {
+    ) -> impl Iterator<Item = EdgeIdx> + ExactSizeIterator + Clone + '_ {
         self.node_incidences[node_idx.idx()]
             .iter()
             .map(|(_, (edge_idx, _))| *edge_idx)
     }
 
     /// Nodes incident to an edge, sorted by increasing indices.
-    pub fn edge<'a>(
-        &'a self,
+    pub fn edge(
+        &self,
         edge_idx: EdgeIdx,
-    ) -> impl Iterator<Item = NodeIdx> + ExactSizeIterator + Clone + 'a {
+    ) -> impl Iterator<Item = NodeIdx> + ExactSizeIterator + Clone + '_ {
         self.edge_incidences[edge_idx.idx()]
             .iter()
             .map(|(_, (node_idx, _))| *node_idx)

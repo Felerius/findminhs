@@ -11,7 +11,7 @@ struct ActivitySegTreeOp;
 #[derive(Debug, Copy, Clone, Default)]
 struct SegTreeItem {
     /// Activity of the associated node.
-    activity: (f64, f64),
+    activity: f64,
 
     /// Which node this item belongs to.
     ///
@@ -20,34 +20,6 @@ struct SegTreeItem {
     /// considered for the node with the most activity.
     node_idx: NodeIdx,
 }
-
-#[cfg(feature = "activity-positive-only")]
-fn combine_activity(pos: f64, _neg: f64) -> f64 {
-    pos
-}
-
-#[cfg(feature = "activity-negative-only")]
-fn combine_activity(_pos: f64, neg: f64) -> f64 {
-    neg
-}
-
-#[cfg(feature = "activity-sum")]
-fn combine_activity(pos: f64, neg: f64) -> f64 {
-    pos + neg
-}
-
-#[cfg(feature = "activity-max")]
-fn combine_activity(pos: f64, neg: f64) -> f64 {
-    pos.max(neg)
-}
-
-#[cfg(not(any(
-    feature = "activity-positive-only",
-    feature = "activity-negative-only",
-    feature = "activity-sum",
-    feature = "activity-max",
-)))]
-compile_error!("No activity combinator function selected while activity is enabled");
 
 impl SegTreeOp for ActivitySegTreeOp {
     type Item = SegTreeItem;
@@ -60,13 +32,10 @@ impl SegTreeOp for ActivitySegTreeOp {
             return *left;
         }
 
-        let left_combined = combine_activity(left.activity.0, left.activity.1);
-        let right_combined = combine_activity(right.activity.0, right.activity.1);
-
         // We only ever add and multiply with constants, so we should never
         // have any NaN's. Check in debug mode, optimize release mode under
         // the above assumption.
-        match left_combined.partial_cmp(&right_combined) {
+        match left.activity.partial_cmp(&right.activity) {
             None => {
                 if cfg!(debug) {
                     panic!("Activity value was set to NaN")
@@ -96,7 +65,7 @@ impl Activities {
     pub fn new(num_nodes: usize) -> Self {
         let activities = (0..num_nodes)
             .map(|idx| SegTreeItem {
-                activity: (0.0, 0.0),
+                activity: 0.0,
                 node_idx: NodeIdx::from(idx),
             })
             .collect();
@@ -112,21 +81,17 @@ impl Activities {
         if self.bump_factor >= Self::RECALC_THRESHOLD {
             trace!("Resetting bump amount");
             let bump_factor = self.bump_factor;
-            self.activities.change_all(|item| {
-                item.activity.0 /= bump_factor;
-                item.activity.1 /= bump_factor;
-            });
+            self.activities
+                .change_all(|item| item.activity /= bump_factor);
             self.bump_factor = 1.0;
         }
     }
 
-    pub fn bump(&mut self, node_idx: NodeIdx, amount: (f64, f64)) {
-        trace!("Bumping {} by {:?}", node_idx, amount);
+    pub fn bump(&mut self, node_idx: NodeIdx) {
+        trace!("Bumping {}", node_idx);
         let bump_factor = self.bump_factor;
-        self.activities.change(node_idx.idx(), |item| {
-            item.activity.0 += amount.0 * bump_factor;
-            item.activity.1 += amount.1 * bump_factor;
-        });
+        self.activities
+            .change(node_idx.idx(), |item| item.activity += bump_factor);
     }
 
     pub fn delete(&mut self, node_idx: NodeIdx) {

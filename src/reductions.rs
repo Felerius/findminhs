@@ -60,10 +60,8 @@ impl Reduction {
 fn find_dominated_nodes(instance: &Instance) -> impl Iterator<Item = ReducedItem> + '_ {
     let mut nodes = instance.nodes().to_vec();
     nodes.sort_unstable_by_key(|&node| Reverse(instance.node_degree(node)));
-
     let mut trie = SupersetTrie::new(instance.num_edges_total());
-    (0..nodes.len()).filter_map(move |idx| {
-        let node_idx = nodes[idx];
+    nodes.into_iter().filter_map(move |node_idx| {
         if trie.contains_superset(instance.node_vec(node_idx)) {
             Some(ReducedItem::RemovedNode(node_idx))
         } else {
@@ -76,10 +74,8 @@ fn find_dominated_nodes(instance: &Instance) -> impl Iterator<Item = ReducedItem
 fn find_dominated_edges(instance: &Instance) -> impl Iterator<Item = ReducedItem> + '_ {
     let mut edges = instance.edges().to_vec();
     edges.sort_unstable_by_key(|&edge| instance.edge_degree(edge));
-
     let mut trie = SubsetTrie::new(instance.num_nodes_total());
-    (0..edges.len()).filter_map(move |idx| {
-        let edge_idx = edges[idx];
+    edges.into_iter().filter_map(move |edge_idx| {
         if trie.contains_subset(instance.edge_vec(edge_idx)) {
             Some(ReducedItem::RemovedEdge(edge_idx))
         } else {
@@ -89,21 +85,18 @@ fn find_dominated_edges(instance: &Instance) -> impl Iterator<Item = ReducedItem
     })
 }
 
-fn find_forced_node(instance: &Instance) -> impl Iterator<Item = ReducedItem> + '_ {
-    instance
-        .min_edge_degree()
-        .and_then(|(degree, edge_idx)| {
-            if degree == 1 {
-                let node_idx = instance
-                    .edge(edge_idx)
-                    .next()
-                    .expect("Degree 1 edge is empty");
-                Some(ReducedItem::ForcedNode(node_idx))
-            } else {
-                None
-            }
-        })
-        .into_iter()
+fn find_forced_node(instance: &Instance) -> Option<ReducedItem> {
+    instance.min_edge_degree().and_then(|(degree, edge_idx)| {
+        if degree == 1 {
+            let node_idx = instance
+                .edge(edge_idx)
+                .next()
+                .expect("Degree 1 edge is empty");
+            Some(ReducedItem::ForcedNode(node_idx))
+        } else {
+            None
+        }
+    })
 }
 
 pub fn reduce(
@@ -129,19 +122,18 @@ pub fn reduce(
             break;
         }
 
-        let len_before1 = reduced.len();
+        let len_middle = reduced.len();
         reduced.extend(find_dominated_edges(instance));
-        for &item in &reduced[len_before1..] {
+        for &item in &reduced[len_middle..] {
             item.apply(instance, partial_hs);
         }
         if should_stop_early(instance, partial_hs) {
             break;
         }
 
-        let len_before2 = reduced.len();
-        reduced.extend(find_forced_node(instance));
-        for &item in &reduced[len_before2..] {
+        if let Some(item) = find_forced_node(instance) {
             item.apply(instance, partial_hs);
+            reduced.push(item);
         }
 
         if reduced.len() == len_start {

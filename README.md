@@ -12,7 +12,7 @@ All required dependencies will be downloaded automatically.
 For example, `cargo build` would build a debug version of the solver.
 
 The Cargo project uses several features to control which version of the activity heuristic is used (including disabling it).
-To replicate the settings used in the thesis, pass `--features=activity-disable` to Cargo to build with uniform-random branching, or `--features=activity-positive-only` for the `abs-incl` heuristic.
+To replicate the settings used in the thesis, pass `--features=branching-random` to Cargo to build with uniform-random branching, or `--features=branching-activity` for the `abs-incl` heuristic.
 
 ## Usage
 
