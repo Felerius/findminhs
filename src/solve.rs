@@ -75,7 +75,7 @@ fn greedy_approx(instance: &mut Instance, base_hs: Vec<NodeIdx>) -> Vec<NodeIdx>
 }
 
 fn lower_bound(instance: &Instance, partial_size: usize) -> usize {
-    let max_node_degree = instance.max_node_degree();
+    let max_node_degree = instance.max_node_degree().0;
     let num_edges = instance.num_edges();
     if max_node_degree == 0 {
         // Instance already solved
@@ -120,7 +120,9 @@ fn pick_branching_node(instance: &Instance, state: &mut State<impl Rng>) -> Node
         if #[cfg(feature = "branching-activity")] {
             state.activities.highest()
         } else if #[cfg(feature = "branching-random")] {
-            instance.nodes().choose(&mut state.rng).expect("check for no nodes failed")
+            *instance.nodes().choose(&mut state.rng).expect("check for no nodes failed")
+        } else if #[cfg(feature = "branching-degree")] {
+            instance.max_node_degree().1
         } else {
             compile_error!("no branching-* feature selected")
         }
