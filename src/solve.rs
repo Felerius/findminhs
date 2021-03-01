@@ -12,6 +12,8 @@ use log::{debug, info, trace, warn};
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 use std::time::{Duration, Instant};
+use std::fs::File;
+use std::io::prelude::*;
 
 const ITER_LOG_GAP: u64 = 60;
 
@@ -257,6 +259,16 @@ pub fn solve(
             .edge(edge_idx)
             .any(|node_idx| hs_set.contains(&node_idx));
         assert!(hit, "edge {} not hit", edge_idx);
+    }
+
+    let mut file = File::create("foo.txt")?;
+    for i in 0..instance.num_nodes_total() {
+        file.write(instance.node_degree(i.into()).to_string().as_bytes())?;
+        file.write(b"\t")?;
+        let u:usize = i.into();
+        let a:i32 = state.activities.bumps[u];
+        file.write(a.to_string().as_bytes())?;
+        file.write(b"\n")?;
     }
 
     Ok(SolveResult {

@@ -53,6 +53,7 @@ impl SegTreeOp for ActivitySegTreeOp {
 pub struct Activities {
     bump_factor: f64,
     activities: SegTree<ActivitySegTreeOp>,
+    pub bumps: Vec<i32>,
 }
 
 impl Activities {
@@ -72,6 +73,7 @@ impl Activities {
         Self {
             bump_factor: 1.0,
             activities,
+            bumps: vec![0; num_nodes],
         }
     }
 
@@ -92,6 +94,9 @@ impl Activities {
         let bump_factor = self.bump_factor;
         self.activities
             .change(node_idx.idx(), |item| item.activity += bump_factor);
+
+        let i:usize = node_idx.into();
+        self.bumps[i] = self.bumps[i] + 1;
     }
 
     pub fn delete(&mut self, node_idx: NodeIdx) {
