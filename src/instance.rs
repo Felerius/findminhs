@@ -5,7 +5,7 @@ use crate::data_structures::skipvec::SkipVec;
 use crate::small_indices::SmallIdx;
 use anyhow::{anyhow, ensure, Result};
 use log::{info, trace};
-use std::io::BufRead;
+use std::io::{BufRead, Write};
 use std::mem;
 use std::time::Instant;
 
@@ -303,5 +303,36 @@ impl Instance {
             self.restore_edge(*edge_idx);
         }
         self.node_incidences[node_idx.idx()] = incidence;
+    }
+
+    pub fn export_as_ilp(&self, mut writer: impl Write) -> Result<()> {
+        writeln!(writer, "Minimize")?;
+        write!(writer, "  v{:05}", self.nodes()[0].idx())?;
+        for node in &self.nodes()[1..] {
+            write!(writer, " + v{:05}", node.idx())?;
+        }
+        writeln!(writer)?;
+
+        writeln!(writer, "Subject To")?;
+        for &edge in self.edges() {
+            write!(writer, "  e{:06}: ", edge.idx())?;
+            for (idx, node) in self.edge(edge).enumerate() {
+                if idx > 0 {
+                    write!(writer, " + ")?;
+                }
+                write!(writer, "v{:05}", node.idx())?;
+            }
+            writeln!(writer, " >= 1")?;
+        }
+
+        writeln!(writer, "Binaries")?;
+        write!(writer, "  v{:05}", self.nodes()[0].idx())?;
+        for node in &self.nodes()[1..] {
+            write!(writer, " v{:05}", node.idx())?;
+        }
+        writeln!(writer)?;
+
+        writeln!(writer, "End")?;
+        Ok(())
     }
 }

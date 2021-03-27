@@ -37,7 +37,7 @@ pub struct SupersetTrie {
 
 impl<K: SmallIdx, V: SmallIdx> SmallMap<K, V> {
     fn new(key_range_size: usize) -> Self {
-        if key_range_size <= 256 {
+        if key_range_size <= 32 {
             Self::Small(vec![V::INVALID; key_range_size])
         } else {
             Self::Large(IdxHashMap::default())
