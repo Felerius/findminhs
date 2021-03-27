@@ -74,7 +74,30 @@ fn greedy_approx(instance: &mut Instance, base_hs: Vec<NodeIdx>) -> Vec<NodeIdx>
     hs
 }
 
-fn lower_bound(instance: &Instance, partial_size: usize) -> usize {
+fn expensive_lower_bound(instance: &Instance, partial_size: usize) -> usize {
+    let mut edges: Vec<_> = instance.edges().iter().copied().collect();
+    edges.sort_by_cached_key(|&edge_idx| {
+        instance
+            .edge(edge_idx)
+            .map(|node_idx| instance.node_degree(node_idx))
+            .sum::<usize>()
+    });
+
+    let mut hit = vec![false; instance.num_nodes_total()];
+    let mut lower_bound = partial_size;
+    for edge_idx in edges {
+        if instance.edge(edge_idx).all(|node_idx| !hit[node_idx.idx()]) {
+            lower_bound += 1;
+            for node_idx in instance.edge(edge_idx) {
+                hit[node_idx.idx()] = true;
+            }
+        }
+    }
+
+    lower_bound
+}
+
+fn cheap_lower_bound(instance: &Instance, partial_size: usize) -> usize {
     let max_node_degree = instance.max_node_degree().0;
     let num_edges = instance.num_edges();
     if max_node_degree == 0 {
@@ -151,7 +174,7 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
             &mut state.stats,
             |instance, partial_hs| match instance.min_edge_degree() {
                 None | Some((0, _)) => true,
-                _ => lower_bound(instance, partial_hs.len()) >= smallest_known_size,
+                _ => cheap_lower_bound(instance, partial_hs.len()) >= smallest_known_size,
             },
         )
     } else {
@@ -163,7 +186,7 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
         state.activities.delete(removed_node_idx)
     }
 
-    if lower_bound(instance, state.partial_hs.len()) >= smallest_known_size {
+    if expensive_lower_bound(instance, state.partial_hs.len()) >= smallest_known_size {
         // Instance unsolvable or lower bound exceeds best known size
         #[cfg(feature = "branching-activity")]
         {

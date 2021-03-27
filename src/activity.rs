@@ -115,8 +115,4 @@ impl Activities {
     pub fn highest(&self) -> NodeIdx {
         self.activities.root().node_idx
     }
-
-    pub fn activity(&self, node_idx: NodeIdx) -> f64 {
-        self.activities.leaf(node_idx.idx()).activity
-    }
 }

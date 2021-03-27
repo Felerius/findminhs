@@ -75,10 +75,6 @@ impl<O: SegTreeOp> SegTree<O> {
     pub fn root(&self) -> &O::Item {
         &self.data[0]
     }
-
-    pub fn leaf(&self, idx: usize) -> &O::Item {
-        &self.data[self.first_leaf() + idx]
-    }
 }
 
 impl<O: SegTreeOp> FromIterator<O::Item> for SegTree<O>
