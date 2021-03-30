@@ -14,8 +14,6 @@ use std::{
 };
 use structopt::StructOpt;
 
-#[cfg(feature = "branching-activity")]
-mod activity;
 mod data_structures;
 mod instance;
 mod reductions;

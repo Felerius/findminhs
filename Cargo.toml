@@ -6,9 +6,6 @@ edition = "2018"
 
 [features]
 debug-skipvec = []
-branching-activity = []
-branching-degree = []
-branching-random = []
 
 [dependencies]
 anyhow = "1.0"
@@ -22,7 +19,6 @@ rand = "0.7"
 rand_pcg = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 structopt = "0.3"
-cfg-if = "1.0.0"
 
 [profile.release]
 lto = true

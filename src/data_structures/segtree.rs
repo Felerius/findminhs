@@ -58,16 +58,6 @@ impl<O: SegTreeOp> SegTree<O> {
         }
     }
 
-    pub fn change_all(&mut self, mut op: impl FnMut(&mut O::Item)) {
-        let first_leaf = self.first_leaf();
-        for item in self.data[first_leaf..].iter_mut().rev() {
-            op(item);
-        }
-        for index in (0..first_leaf).map(HeapIdx::from).rev() {
-            self.recalc_at(index);
-        }
-    }
-
     pub fn set(&mut self, index: usize, value: O::Item) {
         self.change(index, |val| *val = value);
     }

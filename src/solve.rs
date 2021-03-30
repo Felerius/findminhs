@@ -1,15 +1,10 @@
-#[cfg(feature = "branching-activity")]
-use crate::activity::Activities;
 use crate::{
     instance::{Instance, NodeIdx},
     reductions::{self, Reduction},
     small_indices::{IdxHashSet, SmallIdx},
 };
 use anyhow::Result;
-use cfg_if::cfg_if;
 use log::{debug, info, trace, warn};
-#[cfg(feature = "branching-random")]
-use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 use std::time::{Duration, Instant};
 
@@ -31,9 +26,6 @@ struct State<R: Rng> {
 
     /// Smallest known HS
     smallest_known: Vec<NodeIdx>,
-
-    #[cfg(feature = "branching-activity")]
-    activities: Activities,
 
     stats: Stats,
 
@@ -112,9 +104,6 @@ fn branch_on(node_idx: NodeIdx, instance: &mut Instance, state: &mut State<impl 
     trace!("Branching on {}", node_idx);
     instance.delete_node(node_idx);
 
-    #[cfg(feature = "branching-activity")]
-    state.activities.delete(node_idx);
-
     // Randomize branching order
     let take_first: bool = state.rng.gen();
     for &take in &[take_first, !take_first] {
@@ -132,24 +121,7 @@ fn branch_on(node_idx: NodeIdx, instance: &mut Instance, state: &mut State<impl 
         }
     }
 
-    #[cfg(feature = "branching-activity")]
-    state.activities.restore(node_idx);
     instance.restore_node(node_idx);
-}
-
-#[allow(unused_variables)]
-fn pick_branching_node(instance: &Instance, state: &mut State<impl Rng>) -> NodeIdx {
-    cfg_if! {
-        if #[cfg(feature = "branching-activity")] {
-            state.activities.highest()
-        } else if #[cfg(feature = "branching-random")] {
-            *instance.nodes().choose(&mut state.rng).expect("check for no nodes failed")
-        } else if #[cfg(feature = "branching-degree")] {
-            instance.max_node_degree().1
-        } else {
-            compile_error!("no branching-* feature selected")
-        }
-    }
 }
 
 fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
@@ -181,20 +153,8 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
         Reduction::default()
     };
 
-    #[cfg(feature = "branching-activity")]
-    for removed_node_idx in reduction.nodes() {
-        state.activities.delete(removed_node_idx)
-    }
-
     if expensive_lower_bound(instance, state.partial_hs.len()) >= smallest_known_size {
-        // Instance unsolvable or lower bound exceeds best known size
-        #[cfg(feature = "branching-activity")]
-        {
-            for &node in &state.partial_hs {
-                state.activities.bump(node);
-            }
-            state.activities.decay();
-        }
+        // Prune this branch
     } else if instance.edges().is_empty() {
         // Instance is solved
         if state.partial_hs.len() < smallest_known_size {
@@ -209,16 +169,12 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
             );
         }
     } else {
-        let node = pick_branching_node(instance, state);
+        // Branch on highest degree node
+        let node = instance.max_node_degree().1;
         branch_on(node, instance, state);
     }
 
     reduction.restore(instance, &mut state.partial_hs);
-
-    #[cfg(feature = "branching-activity")]
-    for node in reduction.nodes() {
-        state.activities.restore(node);
-    }
 }
 
 pub fn solve(
@@ -230,8 +186,6 @@ pub fn solve(
         rng,
         partial_hs: Vec::new(),
         smallest_known: Vec::new(),
-        #[cfg(feature = "branching-activity")]
-        activities: Activities::new(instance.num_nodes_total()),
         stats: Stats {
             iterations: 0,
             reduction_time: Duration::default(),
@@ -247,11 +201,6 @@ pub fn solve(
         |_, _| false,
     );
     info!("Initial reduction time: {:.2?}", state.stats.reduction_time);
-
-    #[cfg(feature = "branching-activity")]
-    for node_idx in initial_reduction.nodes() {
-        state.activities.delete(node_idx);
-    }
 
     let time_start = Instant::now();
     state.smallest_known = greedy_approx(&mut instance, state.partial_hs.clone());

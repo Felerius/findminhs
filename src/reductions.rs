@@ -41,15 +41,6 @@ impl ReducedItem {
 pub struct Reduction(Vec<ReducedItem>);
 
 impl Reduction {
-    pub fn nodes(&self) -> impl Iterator<Item = NodeIdx> + '_ {
-        self.0.iter().filter_map(|&item| match item {
-            ReducedItem::RemovedNode(node_idx) | ReducedItem::ForcedNode(node_idx) => {
-                Some(node_idx)
-            }
-            _ => None,
-        })
-    }
-
     pub fn restore(&self, instance: &mut Instance, partial_hs: &mut Vec<NodeIdx>) {
         for item in self.0.iter().rev() {
             item.restore(instance, partial_hs)

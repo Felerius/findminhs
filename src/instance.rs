@@ -305,6 +305,7 @@ impl Instance {
         self.node_incidences[node_idx.idx()] = incidence;
     }
 
+    #[allow(dead_code)]
     pub fn export_as_ilp(&self, mut writer: impl Write) -> Result<()> {
         writeln!(writer, "Minimize")?;
         write!(writer, "  v{:05}", self.nodes()[0].idx())?;
