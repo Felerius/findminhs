@@ -6,39 +6,59 @@ use crate::{
 use anyhow::Result;
 use log::{debug, info, trace, warn};
 use rand::{Rng, SeedableRng};
+use serde::{Serialize, Serializer};
 use std::time::{Duration, Instant};
 
 const ITER_LOG_GAP: u64 = 60;
 
-#[derive(Debug, Clone)]
-pub struct Stats {
-    pub iterations: usize,
-    pub reduction_time: Duration,
-    pub last_iter_log: Instant,
+fn serialize_duration_as_seconds<S>(duration: &Duration, ser: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    ser.serialize_f64(duration.as_secs_f64())
+}
+
+#[allow(clippy::clippy::ptr_arg)]
+fn serialize_hitting_set_as_size<S>(hs: &Vec<NodeIdx>, ser: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    ser.serialize_u64(hs.len() as u64)
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Solution {
+    /// Name of the input file for the instance
+    pub file_name: String,
+
+    /// Minimum hitting set
+    #[serde(rename = "hs_size", serialize_with = "serialize_hitting_set_as_size")]
+    pub minimum_hs: Vec<NodeIdx>,
+
+    /// Size of the greedily found initial hitting set
+    pub greedy_size: usize,
+
+    /// How often the branching algorithm has branched
+    pub branching_steps: usize,
+
+    /// Total time required to solve the instance
+    #[serde(serialize_with = "serialize_duration_as_seconds")]
+    pub runtime: Duration,
+
+    /// How long the initial reduction took
+    #[serde(serialize_with = "serialize_duration_as_seconds")]
+    pub initial_reduction_runtime: Duration,
+
+    /// Seed for the random number generator
+    pub seed: u64,
 }
 
 #[derive(Debug, Clone)]
 struct State<R: Rng> {
     rng: R,
-
-    /// All nodes in the partial HS, including those added by reductions
     partial_hs: Vec<NodeIdx>,
-
-    /// Smallest known HS
-    smallest_known: Vec<NodeIdx>,
-
-    stats: Stats,
-
-    instance_name: String,
-}
-
-#[derive(Debug, Clone)]
-#[allow(clippy::module_name_repetitions)]
-pub struct SolveResult {
-    pub hs_size: usize,
-    pub greedy_size: usize,
-    pub solve_time: f64,
-    pub stats: Stats,
+    solution: Solution,
+    last_log_time: Instant,
 }
 
 fn greedy_approx(instance: &mut Instance, base_hs: Vec<NodeIdx>) -> Vec<NodeIdx> {
@@ -103,6 +123,7 @@ fn cheap_lower_bound(instance: &Instance, partial_size: usize) -> usize {
 fn branch_on(node_idx: NodeIdx, instance: &mut Instance, state: &mut State<impl Rng>) {
     trace!("Branching on {}", node_idx);
     instance.delete_node(node_idx);
+    state.solution.branching_steps += 1;
 
     // Randomize branching order
     let take_first: bool = state.rng.gen();
@@ -125,33 +146,30 @@ fn branch_on(node_idx: NodeIdx, instance: &mut Instance, state: &mut State<impl 
 }
 
 fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
-    state.stats.iterations += 1;
-    let smallest_known_size = state.smallest_known.len();
+    let smallest_known_size = state.solution.minimum_hs.len();
 
     let now = Instant::now();
-    if (now - state.stats.last_iter_log).as_secs() >= ITER_LOG_GAP {
+    if (now - state.last_log_time).as_secs() >= ITER_LOG_GAP {
         info!(
-            "Running on {} for {} iterations",
-            &state.instance_name, state.stats.iterations
+            "Running on {} for {} branching steps",
+            &state.solution.file_name, state.solution.branching_steps
         );
-        state.stats.last_iter_log = now;
+        state.last_log_time = now;
     }
 
     // Don't run reductions on the first iteration, we already do so before
     // calculating the greedy approximation
-    let reduction = if state.stats.iterations > 1 {
-        reductions::reduce(
-            instance,
-            &mut state.partial_hs,
-            &mut state.stats,
-            |instance, partial_hs| match instance.min_edge_degree() {
-                None | Some((0, _)) => true,
-                _ => cheap_lower_bound(instance, partial_hs.len()) >= smallest_known_size,
-            },
-        )
-    } else {
-        Reduction::default()
-    };
+    let reduction =
+        if state.solution.branching_steps == 0 {
+            Reduction::default()
+        } else {
+            reductions::reduce(instance, &mut state.partial_hs, |instance, partial_hs| {
+                match instance.min_edge_degree() {
+                    None | Some((0, _)) => true,
+                    _ => cheap_lower_bound(instance, partial_hs.len()) >= smallest_known_size,
+                }
+            })
+        };
 
     if expensive_lower_bound(instance, state.partial_hs.len()) >= smallest_known_size {
         // Prune this branch
@@ -159,13 +177,13 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
         // Instance is solved
         if state.partial_hs.len() < smallest_known_size {
             info!("Found HS of size {}", state.partial_hs.len());
-            state.smallest_known.truncate(state.partial_hs.len());
-            state.smallest_known.copy_from_slice(&state.partial_hs);
+            state.solution.minimum_hs.truncate(state.partial_hs.len());
+            state.solution.minimum_hs.copy_from_slice(&state.partial_hs);
         } else {
             warn!(
                 "Found HS is not smaller than best known ({} vs. {}), should have been pruned",
                 state.partial_hs.len(),
-                state.smallest_known.len()
+                smallest_known_size,
             );
         }
     } else {
@@ -177,51 +195,51 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
     reduction.restore(instance, &mut state.partial_hs);
 }
 
-pub fn solve(
+pub fn solve<R: Rng + SeedableRng>(
     mut instance: Instance,
-    rng: impl Rng + SeedableRng,
-    instance_name: String,
-) -> Result<SolveResult> {
-    let mut state = State {
-        rng,
-        partial_hs: Vec::new(),
-        smallest_known: Vec::new(),
-        stats: Stats {
-            iterations: 0,
-            reduction_time: Duration::default(),
-            last_iter_log: Instant::now(),
-        },
-        instance_name,
-    };
-
-    let initial_reduction = reductions::reduce(
-        &mut instance,
-        &mut state.partial_hs,
-        &mut state.stats,
-        |_, _| false,
-    );
-    info!("Initial reduction time: {:.2?}", state.stats.reduction_time);
+    file_name: String,
+    seed: u64,
+) -> Result<Solution> {
+    let time_start = Instant::now();
+    let mut base_hs = Vec::new();
+    let initial_reduction = reductions::reduce(&mut instance, &mut base_hs, |_, _| false);
+    let initial_reduction_runtime = time_start.elapsed();
+    info!("Initial reduction time: {:.2?}", initial_reduction_runtime);
 
     let time_start = Instant::now();
-    state.smallest_known = greedy_approx(&mut instance, state.partial_hs.clone());
-    let greedy_size = state.smallest_known.len();
+    let greedy_hs = greedy_approx(&mut instance, base_hs);
+    let greedy_size = greedy_hs.len();
 
+    let mut state = State {
+        rng: R::seed_from_u64(seed),
+        partial_hs: Vec::new(),
+        solution: Solution {
+            file_name,
+            minimum_hs: greedy_hs,
+            seed,
+            branching_steps: 0,
+            greedy_size,
+            runtime: Duration::default(),
+            initial_reduction_runtime,
+        },
+        last_log_time: Instant::now(),
+    };
     solve_recursive(&mut instance, &mut state);
-    let solve_time = Instant::now() - time_start;
+    let runtime = Instant::now() - time_start;
 
     info!(
-        "Solving took {} iterations ({:.2?})",
-        state.stats.iterations, solve_time
+        "Solving took {} branching steps in {:.2?}",
+        state.solution.branching_steps, runtime
     );
     debug!(
         "Final HS (size {}): {:?}",
-        state.smallest_known.len(),
-        &state.smallest_known
+        state.solution.minimum_hs.len(),
+        &state.solution.minimum_hs
     );
 
     info!("Validating found hitting set");
     initial_reduction.restore(&mut instance, &mut state.partial_hs);
-    let hs_set: IdxHashSet<_> = state.smallest_known.iter().copied().collect();
+    let hs_set: IdxHashSet<_> = state.solution.minimum_hs.iter().copied().collect();
     assert_eq!(instance.num_nodes_total(), instance.nodes().len());
     assert_eq!(instance.num_edges_total(), instance.edges().len());
     for &edge_idx in instance.edges() {
@@ -231,10 +249,5 @@ pub fn solve(
         assert!(hit, "edge {} not hit", edge_idx);
     }
 
-    Ok(SolveResult {
-        hs_size: state.smallest_known.len(),
-        greedy_size,
-        solve_time: solve_time.as_secs_f64(),
-        stats: state.stats,
-    })
+    Ok(state.solution)
 }

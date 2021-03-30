@@ -1,7 +1,6 @@
 use crate::data_structures::set_tries::{SubsetTrie, SupersetTrie};
 use crate::instance::{EdgeIdx, Instance, NodeIdx};
-use crate::solve::Stats;
-use std::{cmp::Reverse, time::Instant};
+use std::cmp::Reverse;
 
 #[derive(Copy, Clone, Debug)]
 enum ReducedItem {
@@ -93,12 +92,9 @@ fn find_forced_node(instance: &Instance) -> Option<ReducedItem> {
 pub fn reduce(
     instance: &mut Instance,
     partial_hs: &mut Vec<NodeIdx>,
-    stats: &mut Stats,
     mut should_stop_early: impl FnMut(&Instance, &[NodeIdx]) -> bool,
 ) -> Reduction {
-    let time_start = Instant::now();
     let mut reduced = Vec::new();
-
     loop {
         let len_start = reduced.len();
         if should_stop_early(instance, partial_hs) {
@@ -132,7 +128,5 @@ pub fn reduce(
         }
     }
 
-    let elapsed = Instant::now() - time_start;
-    stats.reduction_time += elapsed;
     Reduction(reduced)
 }

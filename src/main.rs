@@ -1,11 +1,10 @@
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(clippy::similar_names, clippy::cast_possible_truncation)]
-use crate::{instance::Instance, solve::SolveResult};
+use crate::instance::Instance;
 use anyhow::{anyhow, Result};
 use csv::WriterBuilder;
 use log::info;
-use rand::{rngs::OsRng, Rng, SeedableRng};
-use serde::Serialize;
+use rand::{rngs::OsRng, Rng};
 use std::{
     ffi::OsStr,
     fs::{File, OpenOptions},
@@ -32,32 +31,6 @@ struct CliOpts {
     csv: Option<PathBuf>,
 }
 
-#[derive(Debug, Serialize)]
-struct CsvRecord {
-    // serde(flatten) unfortunately doesn't work: https://github.com/BurntSushi/rust-csv/issues/98
-    file_name: String,
-    seed: u64,
-    hs_size: usize,
-    greedy_size: usize,
-    solve_time: f64,
-    iterations: usize,
-    reduction_time: f64,
-}
-
-impl CsvRecord {
-    fn new(file_name: String, seed: u64, results: &SolveResult) -> Result<Self> {
-        Ok(Self {
-            file_name,
-            seed,
-            hs_size: results.hs_size,
-            greedy_size: results.greedy_size,
-            solve_time: results.solve_time,
-            iterations: results.stats.iterations,
-            reduction_time: results.stats.reduction_time.as_secs_f64(),
-        })
-    }
-}
-
 fn main() -> Result<()> {
     env_logger::from_env(env_logger::Env::new().filter_or("FINDMINHS_LOG", "info"))
         .format_timestamp_millis()
@@ -77,9 +50,9 @@ fn main() -> Result<()> {
 
     let seed: u64 = OsRng.gen();
     info!("RNG seed: {:#018x}", seed);
-    let rng = rand_pcg::Pcg64Mcg::seed_from_u64(seed);
-    let results = solve::solve(instance, rng, file_name.clone())?;
-    info!("Smallest HS has size {}", results.hs_size);
+
+    let solution = solve::solve::<rand_pcg::Pcg64Mcg>(instance, file_name, seed)?;
+    info!("Smallest HS has size {}", solution.minimum_hs.len());
 
     if let Some(csv_file) = opts.csv {
         let file = OpenOptions::new()
@@ -90,7 +63,7 @@ fn main() -> Result<()> {
         let mut writer = WriterBuilder::new()
             .has_headers(write_header)
             .from_writer(file);
-        writer.serialize(CsvRecord::new(file_name, seed, &results)?)?;
+        writer.serialize(solution)?;
     }
 
     Ok(())
