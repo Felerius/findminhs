@@ -127,10 +127,6 @@ impl Instance {
         })
     }
 
-    pub fn num_edges(&self) -> usize {
-        self.edges.len()
-    }
-
     pub fn num_nodes_total(&self) -> usize {
         self.node_incidences.len()
     }

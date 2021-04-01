@@ -1,9 +1,11 @@
 use crate::data_structures::set_tries::{SubsetTrie, SupersetTrie};
 use crate::instance::{EdgeIdx, Instance, NodeIdx};
+use crate::small_indices::SmallIdx;
+use log::info;
 use std::cmp::Reverse;
 
 #[derive(Copy, Clone, Debug)]
-enum ReducedItem {
+pub enum ReducedItem {
     RemovedNode(NodeIdx),
     RemovedEdge(EdgeIdx),
     ForcedNode(NodeIdx),
@@ -47,6 +49,19 @@ impl Reduction {
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum ReductionResult {
+    Solved,
+    Unsolvable,
+    Finished,
+}
+
+#[derive(Debug, Clone)]
+pub enum LowerBoundResult {
+    PruneBranch,
+    ForcedNodes(Vec<ReducedItem>),
+}
+
 fn find_dominated_nodes(instance: &Instance) -> impl Iterator<Item = ReducedItem> + '_ {
     let mut nodes = instance.nodes().to_vec();
     nodes.sort_unstable_by_key(|&node| Reverse(instance.node_degree(node)));
@@ -75,7 +90,7 @@ fn find_dominated_edges(instance: &Instance) -> impl Iterator<Item = ReducedItem
     })
 }
 
-fn find_forced_node(instance: &Instance) -> Option<ReducedItem> {
+fn find_size_1_edge(instance: &Instance) -> Option<ReducedItem> {
     instance.min_edge_degree().and_then(|(degree, edge_idx)| {
         if degree == 1 {
             let node_idx = instance
@@ -89,44 +104,162 @@ fn find_forced_node(instance: &Instance) -> Option<ReducedItem> {
     })
 }
 
-pub fn reduce(
-    instance: &mut Instance,
-    partial_hs: &mut Vec<NodeIdx>,
-    mut should_stop_early: impl FnMut(&Instance, &[NodeIdx]) -> bool,
-) -> Reduction {
-    let mut reduced = Vec::new();
-    loop {
-        let len_start = reduced.len();
-        if should_stop_early(instance, partial_hs) {
-            break;
-        }
+pub fn lower_bound(
+    instance: &Instance,
+    partial_size: usize,
+    smallest_known_size: usize,
+) -> (usize, LowerBoundResult) {
+    let mut edges: Vec<_> = instance.edges().iter().copied().collect();
+    edges.sort_by_cached_key(|&edge_idx| {
+        instance
+            .edge(edge_idx)
+            .map(|node_idx| instance.node_degree(node_idx))
+            .sum::<usize>()
+    });
 
-        reduced.extend(find_dominated_nodes(instance));
-        for &item in &reduced[len_start..] {
-            item.apply(instance, partial_hs);
-        }
-        if should_stop_early(instance, partial_hs) {
-            break;
-        }
-
-        let len_middle = reduced.len();
-        reduced.extend(find_dominated_edges(instance));
-        for &item in &reduced[len_middle..] {
-            item.apply(instance, partial_hs);
-        }
-        if should_stop_early(instance, partial_hs) {
-            break;
-        }
-
-        if let Some(item) = find_forced_node(instance) {
-            item.apply(instance, partial_hs);
-            reduced.push(item);
-        }
-
-        if reduced.len() == len_start {
-            break;
+    let mut hit = vec![false; instance.num_nodes_total()];
+    let mut lower_bound = partial_size;
+    let mut blocked_by = vec![vec![]; instance.num_nodes_total()];
+    for edge_idx in edges {
+        let mut blocking_iter = instance
+            .edge(edge_idx)
+            .filter(|node_idx| hit[node_idx.idx()]);
+        if let Some(first_blocking) = blocking_iter.next() {
+            if blocking_iter.next().is_none() {
+                blocked_by[first_blocking.idx()].push(edge_idx);
+            }
+        } else {
+            lower_bound += 1;
+            for node_idx in instance.edge(edge_idx) {
+                hit[node_idx.idx()] = true;
+            }
         }
     }
 
-    Reduction(reduced)
+    if lower_bound >= smallest_known_size {
+        return (lower_bound, LowerBoundResult::PruneBranch);
+    }
+
+    let mut undo_stack = vec![];
+    let forced_nodes = instance
+        .nodes()
+        .iter()
+        .copied()
+        .filter_map(|node_idx| {
+            let mut new_lower_bound = lower_bound;
+            for &edge_idx in &blocked_by[node_idx.idx()] {
+                if instance
+                    .edge(edge_idx)
+                    .all(|edge_node| edge_node == node_idx || !hit[edge_node.idx()])
+                {
+                    new_lower_bound += 1;
+                    for edge_node in instance.edge(edge_idx) {
+                        if edge_node != node_idx {
+                            hit[edge_node.idx()] = true;
+                            undo_stack.push(edge_node);
+                        }
+                    }
+                }
+            }
+
+            for undo_node in undo_stack.drain(..) {
+                hit[undo_node.idx()] = false;
+            }
+
+            if new_lower_bound >= smallest_known_size {
+                Some(ReducedItem::ForcedNode(node_idx))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    (lower_bound, LowerBoundResult::ForcedNodes(forced_nodes))
+}
+
+pub fn greedy_approx(instance: &mut Instance) -> Vec<NodeIdx> {
+    let mut hs = Vec::new();
+    while !instance.edges().is_empty() {
+        let max_degree_node = instance.max_node_degree().1;
+        instance.delete_node(max_degree_node);
+        instance.delete_incident_edges(max_degree_node);
+        hs.push(max_degree_node);
+    }
+    for &node in hs.iter().rev() {
+        instance.restore_incident_edges(node);
+        instance.restore_node(node);
+    }
+    hs
+}
+
+pub fn reduce(
+    instance: &mut Instance,
+    partial_hs: &mut Vec<NodeIdx>,
+    minimum_hs: &mut Vec<NodeIdx>,
+) -> (ReductionResult, Reduction) {
+    let mut reduced = Vec::new();
+    let result = loop {
+        let greedy = greedy_approx(instance);
+        if partial_hs.len() + greedy.len() < minimum_hs.len() {
+            minimum_hs.clear();
+            minimum_hs.extend(partial_hs.iter().copied());
+            minimum_hs.extend(greedy.iter().copied());
+            info!(
+                "Found HS of size {} using greedy (partial {} + greedy {})",
+                minimum_hs.len(),
+                partial_hs.len(),
+                greedy.len()
+            );
+        }
+
+        if partial_hs.len() >= minimum_hs.len() {
+            break ReductionResult::Unsolvable;
+        }
+        match instance.min_edge_degree() {
+            None => break ReductionResult::Solved,
+            Some((0, _)) => break ReductionResult::Unsolvable,
+            Some(_) => {}
+        }
+
+        if let Some(forced_node) = find_size_1_edge(instance) {
+            forced_node.apply(instance, partial_hs);
+            reduced.push(forced_node);
+            continue;
+        }
+
+        match lower_bound(instance, partial_hs.len(), minimum_hs.len()).1 {
+            LowerBoundResult::PruneBranch => break ReductionResult::Unsolvable,
+            LowerBoundResult::ForcedNodes(forced_nodes) => {
+                if !forced_nodes.is_empty() {
+                    for forced_node in forced_nodes {
+                        forced_node.apply(instance, partial_hs);
+                        reduced.push(forced_node);
+                    }
+                    continue;
+                }
+            }
+        }
+
+        let mut len_before = reduced.len();
+        reduced.extend(find_dominated_nodes(instance));
+        if reduced.len() > len_before {
+            for reduced_item in &reduced[len_before..] {
+                reduced_item.apply(instance, partial_hs);
+            }
+            continue;
+        }
+
+        len_before = reduced.len();
+        reduced.extend(find_dominated_edges(instance));
+        if reduced.len() > len_before {
+            for reduced_item in &reduced[len_before..] {
+                reduced_item.apply(instance, partial_hs);
+            }
+            continue;
+        }
+
+        break ReductionResult::Finished;
+    };
+
+    (result, Reduction(reduced))
 }
