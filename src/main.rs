@@ -8,7 +8,7 @@ use rand::{rngs::OsRng, Rng};
 use std::{
     ffi::OsStr,
     fs::{File, OpenOptions},
-    io::BufReader,
+    io::{BufReader, BufWriter},
     path::PathBuf,
 };
 use structopt::StructOpt;
@@ -29,6 +29,10 @@ struct CliOpts {
     /// CSV file to append results to
     #[structopt(short, long, parse(from_os_str))]
     csv: Option<PathBuf>,
+
+    /// If given, save the input hypergraph as an ILP to the given file and quit immediately
+    #[structopt(long, parse(from_os_str))]
+    ilp: Option<PathBuf>,
 }
 
 fn main() -> Result<()> {
@@ -37,7 +41,6 @@ fn main() -> Result<()> {
         .init();
 
     let opts = CliOpts::from_args();
-    info!("Solving {:?}", &opts.input_file);
 
     let file_name = opts
         .input_file
@@ -48,6 +51,13 @@ fn main() -> Result<()> {
     let file = BufReader::new(File::open(&opts.input_file)?);
     let instance = Instance::load(file)?;
 
+    if let Some(ilp_path) = opts.ilp {
+        let writer = BufWriter::new(File::create(ilp_path)?);
+        instance.export_as_ilp(writer)?;
+        return Ok(());
+    }
+
+    info!("Solving {:?}", &opts.input_file);
     let seed: u64 = OsRng.gen();
     info!("RNG seed: {:#018x}", seed);
 

@@ -1,13 +1,20 @@
-use crate::create_idx_struct;
-use crate::data_structures::cont_idx_vec::ContiguousIdxVec;
-use crate::data_structures::segtree::{SegTree, SegTreeOp};
-use crate::data_structures::skipvec::SkipVec;
-use crate::small_indices::SmallIdx;
+use crate::{
+    create_idx_struct,
+    data_structures::{
+        cont_idx_vec::ContiguousIdxVec,
+        segtree::{SegTree, SegTreeOp},
+        skipvec::SkipVec,
+    },
+    small_indices::SmallIdx,
+};
 use anyhow::{anyhow, ensure, Result};
 use log::{info, trace};
-use std::io::{BufRead, Write};
-use std::mem;
-use std::time::Instant;
+use std::{
+    fmt::{self, Display, Write as _},
+    io::{BufRead, Write},
+    mem,
+    time::Instant,
+};
 
 create_idx_struct!(pub NodeIdx);
 create_idx_struct!(pub EdgeIdx);
@@ -30,6 +37,20 @@ impl SegTreeOp for EdgeDegreeOp {
 
     fn combine(left: &Self::Item, right: &Self::Item) -> Self::Item {
         *left.min(right)
+    }
+}
+
+struct CompressedIlpName<T>(T);
+
+impl<T: SmallIdx> Display for CompressedIlpName<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        const CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        let mut val = self.0.idx();
+        while val != 0 {
+            f.write_char(char::from(CHARS[val % CHARS.len()]))?;
+            val /= CHARS.len();
+        }
+        Ok(())
     }
 }
 
@@ -304,28 +325,28 @@ impl Instance {
     #[allow(dead_code)]
     pub fn export_as_ilp(&self, mut writer: impl Write) -> Result<()> {
         writeln!(writer, "Minimize")?;
-        write!(writer, "  v{:05}", self.nodes()[0].idx())?;
-        for node in &self.nodes()[1..] {
-            write!(writer, " + v{:05}", node.idx())?;
+        write!(writer, "  v{}", CompressedIlpName(self.nodes()[0]))?;
+        for &node in &self.nodes()[1..] {
+            write!(writer, " + v{}", CompressedIlpName(node))?;
         }
         writeln!(writer)?;
 
         writeln!(writer, "Subject To")?;
         for &edge in self.edges() {
-            write!(writer, "  e{:06}: ", edge.idx())?;
+            write!(writer, "  e{}: ", CompressedIlpName(edge))?;
             for (idx, node) in self.edge(edge).enumerate() {
                 if idx > 0 {
                     write!(writer, " + ")?;
                 }
-                write!(writer, "v{:05}", node.idx())?;
+                write!(writer, "v{}", CompressedIlpName(node))?;
             }
             writeln!(writer, " >= 1")?;
         }
 
         writeln!(writer, "Binaries")?;
-        write!(writer, "  v{:05}", self.nodes()[0].idx())?;
-        for node in &self.nodes()[1..] {
-            write!(writer, " v{:05}", node.idx())?;
+        write!(writer, "  v{}", CompressedIlpName(self.nodes()[0]))?;
+        for &node in &self.nodes()[1..] {
+            write!(writer, " v{}", CompressedIlpName(node))?;
         }
         writeln!(writer)?;
 
