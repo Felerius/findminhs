@@ -1,10 +1,6 @@
 use crate::{
     create_idx_struct,
-    data_structures::{
-        cont_idx_vec::ContiguousIdxVec,
-        segtree::{SegTree, SegTreeOp},
-        skipvec::SkipVec,
-    },
+    data_structures::{cont_idx_vec::ContiguousIdxVec, skipvec::SkipVec},
     small_indices::SmallIdx,
 };
 use anyhow::{anyhow, ensure, Result};
@@ -19,26 +15,6 @@ use std::{
 create_idx_struct!(pub NodeIdx);
 create_idx_struct!(pub EdgeIdx);
 create_idx_struct!(pub EntryIdx);
-
-struct NodeDegreeOp;
-
-impl SegTreeOp for NodeDegreeOp {
-    type Item = (u32, NodeIdx);
-
-    fn combine(left: &Self::Item, right: &Self::Item) -> Self::Item {
-        *left.max(right)
-    }
-}
-
-struct EdgeDegreeOp;
-
-impl SegTreeOp for EdgeDegreeOp {
-    type Item = (u32, EdgeIdx);
-
-    fn combine(left: &Self::Item, right: &Self::Item) -> Self::Item {
-        *left.min(right)
-    }
-}
 
 struct CompressedIlpName<T>(T);
 
@@ -60,13 +36,9 @@ pub struct Instance {
     edges: ContiguousIdxVec<EdgeIdx>,
     node_incidences: Vec<SkipVec<(EdgeIdx, EntryIdx)>>,
     edge_incidences: Vec<SkipVec<(NodeIdx, EntryIdx)>>,
-    node_degrees: SegTree<NodeDegreeOp>,
-    edge_degrees: SegTree<EdgeDegreeOp>,
 }
 
 impl Instance {
-    const DELETED_EDGE_DEGREE: u32 = u32::max_value();
-
     pub fn load(mut reader: impl BufRead) -> Result<Self> {
         let time_before = Instant::now();
         let mut line = String::new();
@@ -125,13 +97,6 @@ impl Instance {
             }
         }
 
-        let node_degrees = (0..num_nodes)
-            .map(|idx| (node_incidences[idx].len() as u32, NodeIdx::from(idx)))
-            .collect();
-        let edge_degrees = (0..num_edges)
-            .map(|idx| (edge_incidences[idx].len() as u32, EdgeIdx::from(idx)))
-            .collect();
-
         info!(
             "Loaded instance with {} nodes, {} edges in {:.2?}",
             num_nodes,
@@ -143,8 +108,6 @@ impl Instance {
             edges,
             node_incidences,
             edge_incidences,
-            node_degrees,
-            edge_degrees,
         })
     }
 
@@ -202,30 +165,13 @@ impl Instance {
         self.edge_incidences[edge_idx.idx()].len()
     }
 
-    pub fn max_node_degree(&self) -> (usize, NodeIdx) {
-        let (degree, node_idx) = *self.node_degrees.root();
-        (degree as usize, node_idx)
-    }
-
-    pub fn min_edge_degree(&self) -> Option<(usize, EdgeIdx)> {
-        let (degree, edge_idx) = *self.edge_degrees.root();
-        if degree == Self::DELETED_EDGE_DEGREE {
-            None
-        } else {
-            Some((degree as usize, edge_idx))
-        }
-    }
-
     /// Deletes a node from the instance.
     pub fn delete_node(&mut self, node_idx: NodeIdx) {
         trace!("Deleting node {}", node_idx);
         for (_idx, (edge_idx, entry_idx)) in &self.node_incidences[node_idx.idx()] {
             self.edge_incidences[edge_idx.idx()].delete(entry_idx.idx());
-            self.edge_degrees
-                .change(edge_idx.idx(), |(degree, _idx)| *degree -= 1);
         }
         self.nodes.delete(node_idx.idx());
-        self.node_degrees.set(node_idx.idx(), (0, node_idx));
     }
 
     /// Deletes an edge from the instance.
@@ -233,12 +179,8 @@ impl Instance {
         trace!("Deleting edge {}", edge_idx);
         for (_idx, (node_idx, entry_idx)) in &self.edge_incidences[edge_idx.idx()] {
             self.node_incidences[node_idx.idx()].delete(entry_idx.idx());
-            self.node_degrees
-                .change(node_idx.idx(), |(degree, _)| *degree -= 1);
         }
         self.edges.delete(edge_idx.idx());
-        self.edge_degrees
-            .set(edge_idx.idx(), (Self::DELETED_EDGE_DEGREE, edge_idx));
     }
 
     /// Restores a previously deleted node.
@@ -249,14 +191,8 @@ impl Instance {
         trace!("Restoring node {}", node_idx);
         for (_idx, (edge_idx, entry_idx)) in self.node_incidences[node_idx.idx()].iter().rev() {
             self.edge_incidences[edge_idx.idx()].restore(entry_idx.idx());
-            self.edge_degrees
-                .change(edge_idx.idx(), |(degree, _idx)| *degree += 1)
         }
         self.nodes.restore(node_idx.idx());
-        self.node_degrees.set(
-            node_idx.idx(),
-            (self.node_degree(node_idx) as u32, node_idx),
-        );
     }
 
     /// Restores a previously deleted edge.
@@ -267,14 +203,8 @@ impl Instance {
         trace!("Restoring edge {}", edge_idx);
         for (_idx, (node_idx, entry_idx)) in self.edge_incidences[edge_idx.idx()].iter().rev() {
             self.node_incidences[node_idx.idx()].restore(entry_idx.idx());
-            self.node_degrees
-                .change(node_idx.idx(), |(degree, _)| *degree += 1);
         }
         self.edges.restore(edge_idx.idx());
-        self.edge_degrees.set(
-            edge_idx.idx(),
-            (self.edge_degree(edge_idx) as u32, edge_idx),
-        );
     }
 
     /// Deletes all edges incident to a node.

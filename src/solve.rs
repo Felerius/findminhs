@@ -119,7 +119,12 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
         }
         ReductionResult::Unsolvable => {}
         ReductionResult::Finished => {
-            let node = instance.max_node_degree().1;
+            let node = instance
+                .nodes()
+                .iter()
+                .copied()
+                .max_by_key(|&node_idx| instance.node_degree(node_idx))
+                .expect("Branching on an empty instance");
             branch_on(node, instance, state);
         }
     }
@@ -132,7 +137,7 @@ pub fn solve<R: Rng + SeedableRng>(
     file_name: String,
     seed: u64,
 ) -> Result<Solution> {
-    let greedy_hs = reductions::greedy_approx(&mut instance);
+    let greedy_hs = reductions::greedy_approx(&instance);
     let lower_bound = reductions::lower_bound(&instance, 0, instance.num_nodes_total()).0;
     info!("Lower bound: {}", lower_bound);
     info!("Upper bound: {}", greedy_hs.len());
