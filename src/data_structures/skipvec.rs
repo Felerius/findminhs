@@ -1,9 +1,10 @@
-use crate::create_idx_struct;
-use crate::small_indices::SmallIdx;
-use std::convert::TryFrom;
-use std::fmt::{self, Debug, Formatter};
-use std::iter::{self, FromIterator, FusedIterator};
-use std::ops::{Index, IndexMut};
+use crate::{create_idx_struct, small_indices::SmallIdx};
+use std::{
+    convert::TryFrom,
+    fmt::{self, Debug, Formatter},
+    iter::{self, FromIterator, FusedIterator},
+    ops::{Index, IndexMut},
+};
 
 /// Fixed-size vector that can delete and restore elements in O(1).
 ///

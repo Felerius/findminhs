@@ -1,5 +1,6 @@
 use crate::{
     instance::{Instance, NodeIdx},
+    lower_bound,
     reductions::{self, ReductionResult},
     small_indices::IdxHashSet,
 };
@@ -138,7 +139,7 @@ pub fn solve<R: Rng + SeedableRng>(
     seed: u64,
 ) -> Result<Solution> {
     let greedy_hs = reductions::greedy_approx(&instance);
-    let lower_bound = reductions::lower_bound(&instance, 0, instance.num_nodes_total()).0;
+    let lower_bound = lower_bound::calculate(&instance, 0).lower_bound;
     info!("Lower bound: {}", lower_bound);
     info!("Upper bound: {}", greedy_hs.len());
 

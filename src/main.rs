@@ -15,6 +15,7 @@ use structopt::StructOpt;
 
 mod data_structures;
 mod instance;
+mod lower_bound;
 mod reductions;
 mod small_indices;
 mod solve;

@@ -1,9 +1,11 @@
-use crate::data_structures::set_tries::{SubsetTrie, SupersetTrie};
-use crate::instance::{EdgeIdx, Instance, NodeIdx};
-use crate::small_indices::{IdxHashSet, SmallIdx};
+use crate::{
+    data_structures::set_tries::{SubsetTrie, SupersetTrie},
+    instance::{EdgeIdx, Instance, NodeIdx},
+    lower_bound::{self, WithBlocked as LowerBoundWithBlocked},
+    small_indices::{IdxHashSet, SmallIdx},
+};
 use log::info;
-use std::cmp::Reverse;
-use std::collections::BinaryHeap;
+use std::{cmp::Reverse, collections::BinaryHeap};
 
 #[derive(Copy, Clone, Debug)]
 pub enum ReducedItem {
@@ -57,12 +59,6 @@ pub enum ReductionResult {
     Finished,
 }
 
-#[derive(Debug, Clone)]
-pub enum LowerBoundResult {
-    PruneBranch,
-    ForcedNodes(Vec<ReducedItem>),
-}
-
 fn find_dominated_nodes(instance: &Instance) -> impl Iterator<Item = ReducedItem> + '_ {
     let mut nodes = instance.nodes().to_vec();
     nodes.sort_unstable_by_key(|&node| Reverse(instance.node_degree(node)));
@@ -110,79 +106,6 @@ fn find_size_1_edges(instance: &Instance) -> impl Iterator<Item = ReducedItem> {
         })
         .collect();
     forced.into_iter().map(ReducedItem::ForcedNode)
-}
-
-pub fn lower_bound(
-    instance: &Instance,
-    partial_size: usize,
-    smallest_known_size: usize,
-) -> (usize, LowerBoundResult) {
-    let mut edges: Vec<_> = instance.edges().iter().copied().collect();
-    edges.sort_by_cached_key(|&edge_idx| {
-        instance
-            .edge(edge_idx)
-            .map(|node_idx| instance.node_degree(node_idx))
-            .sum::<usize>()
-    });
-
-    let mut hit = vec![false; instance.num_nodes_total()];
-    let mut lower_bound = partial_size;
-    let mut blocked_by = vec![vec![]; instance.num_nodes_total()];
-    for edge_idx in edges {
-        let mut blocking_iter = instance
-            .edge(edge_idx)
-            .filter(|node_idx| hit[node_idx.idx()]);
-        if let Some(first_blocking) = blocking_iter.next() {
-            if blocking_iter.next().is_none() {
-                blocked_by[first_blocking.idx()].push(edge_idx);
-            }
-        } else {
-            lower_bound += 1;
-            for node_idx in instance.edge(edge_idx) {
-                hit[node_idx.idx()] = true;
-            }
-        }
-    }
-
-    if lower_bound >= smallest_known_size {
-        return (lower_bound, LowerBoundResult::PruneBranch);
-    }
-
-    let mut undo_stack = vec![];
-    let forced_nodes = instance
-        .nodes()
-        .iter()
-        .copied()
-        .filter_map(|node_idx| {
-            let mut new_lower_bound = lower_bound;
-            for &edge_idx in &blocked_by[node_idx.idx()] {
-                if instance
-                    .edge(edge_idx)
-                    .all(|edge_node| edge_node == node_idx || !hit[edge_node.idx()])
-                {
-                    new_lower_bound += 1;
-                    for edge_node in instance.edge(edge_idx) {
-                        if edge_node != node_idx {
-                            hit[edge_node.idx()] = true;
-                            undo_stack.push(edge_node);
-                        }
-                    }
-                }
-            }
-
-            for undo_node in undo_stack.drain(..) {
-                hit[undo_node.idx()] = false;
-            }
-
-            if new_lower_bound >= smallest_known_size {
-                Some(ReducedItem::ForcedNode(node_idx))
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    (lower_bound, LowerBoundResult::ForcedNodes(forced_nodes))
 }
 
 pub fn greedy_approx(instance: &Instance) -> Vec<NodeIdx> {
@@ -264,9 +187,15 @@ pub fn reduce(
         reduced.extend(find_size_1_edges(instance));
 
         if reduced.len() == len_before {
-            match lower_bound(instance, partial_hs.len(), minimum_hs.len()).1 {
-                LowerBoundResult::PruneBranch => break ReductionResult::Unsolvable,
-                LowerBoundResult::ForcedNodes(forced) => reduced.extend(forced),
+            match lower_bound::calculate_with_blocked_nodes(
+                instance,
+                partial_hs.len(),
+                minimum_hs.len(),
+            ) {
+                LowerBoundWithBlocked::PruneBranch => break ReductionResult::Unsolvable,
+                LowerBoundWithBlocked::ForcedNodes(forced_nodes) => {
+                    reduced.extend(forced_nodes.map(ReducedItem::ForcedNode))
+                }
             }
         }
 

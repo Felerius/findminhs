@@ -1,7 +1,9 @@
 use fxhash::FxHasher32;
-use std::collections::{HashMap, HashSet};
-use std::fmt::{Debug, Display};
-use std::hash::{BuildHasherDefault, Hash};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::{Debug, Display},
+    hash::{BuildHasherDefault, Hash},
+};
 
 pub trait SmallIdx:
     Sized
@@ -64,16 +66,16 @@ macro_rules! create_idx_struct {
             }
         }
 
-        impl ::std::convert::Into<usize> for $name {
-            fn into(self) -> usize {
+        impl ::std::convert::From<$name> for usize {
+            fn from(i: $name) -> Self {
                 use $crate::small_indices::SmallIdx;
-                self.idx()
+                i.idx()
             }
         }
 
-        impl ::std::convert::Into<u32> for $name {
-            fn into(self) -> u32 {
-                self.0
+        impl ::std::convert::From<$name> for u32 {
+            fn from(i: $name) -> Self {
+                i.0
             }
         }
 

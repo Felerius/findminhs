@@ -1,7 +1,5 @@
-use crate::create_idx_struct;
-use crate::small_indices::SmallIdx;
-use std::iter::FromIterator;
-use std::ops::Deref;
+use crate::{create_idx_struct, small_indices::SmallIdx};
+use std::{iter::FromIterator, ops::Deref};
 
 create_idx_struct!(DataIdx);
 

@@ -1,11 +1,14 @@
-use crate::create_idx_struct;
-use crate::data_structures::skipvec::SkipVec;
-use crate::instance::{EdgeIdx, EntryIdx, NodeIdx};
-use crate::small_indices::{IdxHashMap, SmallIdx};
-use std::collections::btree_map::Range as BTreeMapRange;
-use std::collections::BTreeMap;
-use std::mem;
-use std::ops::Bound;
+use crate::{
+    create_idx_struct,
+    data_structures::skipvec::SkipVec,
+    instance::{EdgeIdx, EntryIdx, NodeIdx},
+    small_indices::{IdxHashMap, SmallIdx},
+};
+use std::{
+    collections::{btree_map::Range as BTreeMapRange, BTreeMap},
+    mem,
+    ops::Bound,
+};
 
 #[derive(Debug)]
 enum SmallMap<K: SmallIdx, V> {
@@ -206,11 +209,7 @@ impl SupersetTrie {
         let capacity = stack.capacity();
         // Leak stack
         mem::forget(stack);
-        // ptr-ptr casts don't like casting lifetime params
-        // (https://github.com/rust-lang/rust/issues/27214), so we need to
-        // cast with one in-between stop
-        let void_ptr = stack_ptr as *mut u64;
-        self.stack = unsafe { Vec::from_raw_parts(void_ptr as *mut _, 0, capacity) };
+        self.stack = unsafe { Vec::from_raw_parts(stack_ptr.cast(), 0, capacity) };
 
         result
     }
