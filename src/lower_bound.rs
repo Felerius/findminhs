@@ -66,16 +66,31 @@ pub fn calculate(instance: &Instance, partial_size: usize) -> LowerBound {
         }
     }
 
+    // Right now, blocked_by contains edges that *at the time of checking* where only blocked by
+    // a single node. Due to edges added later on, they might now be blocked by multiple nodes.
+    // This pass removes such nodes
+    for blocked_by_list in &mut blocked_by {
+        blocked_by_list.retain(|&edge_idx| {
+            instance
+                .edge(edge_idx)
+                .filter(|node_idx| hit[node_idx.idx()])
+                .count()
+                == 1
+        });
+    }
+
     degrees.sort_unstable();
+    let mut degree_sum = 0;
     let degree_increase = degrees
         .into_iter()
         .rev()
         .take_while(|&degree| {
-            if edges_to_cover <= 0 {
-                return false;
+            if degree_sum < edges_to_cover {
+                degree_sum += degree as i64;
+                true
+            } else {
+                false
             }
-            edges_to_cover -= degree as i64;
-            true
         })
         .count();
 
