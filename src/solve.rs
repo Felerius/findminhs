@@ -139,7 +139,8 @@ pub fn solve<R: Rng + SeedableRng>(
     seed: u64,
 ) -> Result<Solution> {
     let greedy_hs = reductions::greedy_approx(&instance);
-    let lower_bound = lower_bound::calculate(&instance, 0).lower_bound;
+    let (packing, _) = lower_bound::pack_edges(&instance);
+    let lower_bound = lower_bound::calculate(&instance, &packing, 0);
     info!("Lower bound: {}", lower_bound);
     info!("Upper bound: {}", greedy_hs.len());
 

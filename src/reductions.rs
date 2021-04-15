@@ -1,14 +1,14 @@
 use crate::{
     data_structures::set_tries::{SubsetTrie, SupersetTrie},
     instance::{EdgeIdx, Instance, NodeIdx},
-    lower_bound::{self, WithBlocked as LowerBoundWithBlocked},
+    lower_bound,
     small_indices::{IdxHashSet, SmallIdx},
 };
 use log::info;
 use std::{cmp::Reverse, collections::BinaryHeap};
 
 #[derive(Copy, Clone, Debug)]
-pub enum ReducedItem {
+enum ReducedItem {
     RemovedNode(NodeIdx),
     RemovedEdge(EdgeIdx),
     ForcedNode(NodeIdx),
@@ -108,6 +108,69 @@ fn find_size_1_edges(instance: &Instance) -> impl Iterator<Item = ReducedItem> {
     forced.into_iter().map(ReducedItem::ForcedNode)
 }
 
+fn find_forced_choices<'a>(
+    instance: &'a Instance,
+    packing: &'a [EdgeIdx],
+    remaining: &'a [EdgeIdx],
+    partial_size: usize,
+    smallest_known_size: usize,
+) -> impl Iterator<Item = ReducedItem> + 'a {
+    let mut blocked_by = vec![Vec::new(); instance.num_nodes_total()];
+    let mut hit = vec![false; instance.num_nodes_total()];
+    for &packed_edge in packing {
+        for node_idx in instance.edge(packed_edge) {
+            hit[node_idx.idx()] = true;
+        }
+    }
+
+    for &remaining_edge in remaining {
+        let mut blocking_nodes_iter = instance
+            .edge(remaining_edge)
+            .filter(|&node_idx| hit[node_idx.idx()]);
+        let blocking_node = blocking_nodes_iter
+            .next()
+            .expect("Edge could have been added to packing");
+        if blocking_nodes_iter.next().is_none() {
+            blocked_by[blocking_node.idx()].push(remaining_edge);
+        }
+    }
+
+    blocked_by
+        .into_iter()
+        .enumerate()
+        .filter_map(move |(idx, mut blocked)| {
+            let maybe_blocked_node = NodeIdx::from(idx);
+            blocked.retain(|&edge_idx| {
+                if instance
+                    .edge(edge_idx)
+                    .all(|node_idx| node_idx == maybe_blocked_node || !hit[node_idx.idx()])
+                {
+                    for node_idx in instance.edge(edge_idx) {
+                        hit[node_idx.idx()] = true;
+                    }
+                    true
+                } else {
+                    false
+                }
+            });
+
+            let new_lower_bound = partial_size + packing.len() + blocked.len();
+
+            for edge_idx in blocked {
+                for node_idx in instance.edge(edge_idx) {
+                    hit[node_idx.idx()] = false;
+                }
+            }
+            hit[maybe_blocked_node.idx()] = true;
+
+            if new_lower_bound >= smallest_known_size {
+                Some(ReducedItem::ForcedNode(maybe_blocked_node))
+            } else {
+                None
+            }
+        })
+}
+
 pub fn greedy_approx(instance: &Instance) -> Vec<NodeIdx> {
     let mut hit = vec![true; instance.num_edges_total()];
     for edge_idx in instance.edges() {
@@ -168,10 +231,10 @@ pub fn reduce(
                 greedy.len()
             );
         }
-
         if partial_hs.len() >= minimum_hs.len() {
             break ReductionResult::Unsolvable;
         }
+
         match instance
             .edges()
             .iter()
@@ -183,20 +246,22 @@ pub fn reduce(
             Some(_) => {}
         }
 
+        let (packing, remaining) = lower_bound::pack_edges(instance);
+        if lower_bound::calculate(instance, &packing, partial_hs.len()) >= minimum_hs.len() {
+            break ReductionResult::Unsolvable;
+        }
+
         let len_before = reduced.len();
         reduced.extend(find_size_1_edges(instance));
 
         if reduced.len() == len_before {
-            match lower_bound::calculate_with_blocked_nodes(
+            reduced.extend(find_forced_choices(
                 instance,
+                &packing,
+                &remaining,
                 partial_hs.len(),
                 minimum_hs.len(),
-            ) {
-                LowerBoundWithBlocked::PruneBranch => break ReductionResult::Unsolvable,
-                LowerBoundWithBlocked::ForcedNodes(forced_nodes) => {
-                    reduced.extend(forced_nodes.map(ReducedItem::ForcedNode))
-                }
-            }
+            ));
         }
 
         if reduced.len() == len_before {
