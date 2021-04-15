@@ -64,7 +64,7 @@ fn find_dominated_nodes(instance: &Instance) -> impl Iterator<Item = ReducedItem
     nodes.sort_unstable_by_key(|&node| Reverse(instance.node_degree(node)));
     let mut trie = SupersetTrie::new(instance.num_edges_total());
     nodes.into_iter().filter_map(move |node_idx| {
-        if trie.contains_superset(instance.node_vec(node_idx)) {
+        if trie.contains_superset(instance.node(node_idx)) {
             Some(ReducedItem::RemovedNode(node_idx))
         } else {
             trie.insert(instance.node(node_idx));
@@ -78,10 +78,10 @@ fn find_dominated_edges(instance: &Instance) -> impl Iterator<Item = ReducedItem
     edges.sort_unstable_by_key(|&edge| instance.edge_degree(edge));
     let mut trie = SubsetTrie::new(instance.num_nodes_total());
     edges.into_iter().filter_map(move |edge_idx| {
-        if trie.contains_subset(instance.edge_vec(edge_idx)) {
+        if trie.find_subset(instance.edge(edge_idx)) {
             Some(ReducedItem::RemovedEdge(edge_idx))
         } else {
-            trie.insert(instance.edge(edge_idx));
+            trie.insert(true, instance.edge(edge_idx));
             None
         }
     })

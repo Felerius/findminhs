@@ -143,14 +143,6 @@ impl Instance {
             .map(|(_, (node_idx, _))| *node_idx)
     }
 
-    pub fn node_vec(&self, node_idx: NodeIdx) -> &SkipVec<(EdgeIdx, EntryIdx)> {
-        &self.node_incidences[node_idx.idx()]
-    }
-
-    pub fn edge_vec(&self, edge_idx: EdgeIdx) -> &SkipVec<(NodeIdx, EntryIdx)> {
-        &self.edge_incidences[edge_idx.idx()]
-    }
-
     /// Alive nodes in the instance, in arbitrary order.
     pub fn nodes(&self) -> &[NodeIdx] {
         &self.nodes
