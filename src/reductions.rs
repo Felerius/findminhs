@@ -1,5 +1,5 @@
 use crate::{
-    data_structures::set_tries::{SubsetTrie, SupersetTrie},
+    data_structures::{subset_trie::SubsetTrie, superset_trie::SupersetTrie},
     instance::{EdgeIdx, Instance, NodeIdx},
     lower_bound,
     small_indices::{IdxHashSet, SmallIdx},
