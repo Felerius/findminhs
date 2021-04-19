@@ -159,9 +159,9 @@ fn find_forced_choices<'a>(
             for edge_idx in blocked {
                 for node_idx in instance.edge(edge_idx) {
                     if node_idx != maybe_blocked_node {
-                    hit[node_idx.idx()] = false;
+                        hit[node_idx.idx()] = false;
+                    }
                 }
-            }
             }
 
             if new_lower_bound >= smallest_known_size {

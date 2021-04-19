@@ -13,9 +13,9 @@ enum SubsetTrieChildren<I> {
 }
 
 impl<V: SmallIdx> SubsetTrieChildren<V> {
-    fn new(key_range: usize) -> Self {
-        if key_range <= 32 {
-            Self::Small(key_range, vec![TrieNodeIdx::INVALID; key_range])
+    fn new(val_range: usize) -> Self {
+        if val_range <= 32 {
+            Self::Small(val_range, vec![TrieNodeIdx::INVALID; val_range])
         } else {
             Self::Large(vec![IdxHashMap::default()])
         }
@@ -23,20 +23,20 @@ impl<V: SmallIdx> SubsetTrieChildren<V> {
 
     fn get(&self, node: TrieNodeIdx, edge_val: V) -> TrieNodeIdx {
         match *self {
-            Self::Small(key_range, ref flat) => flat[node.idx() * key_range + edge_val.idx()],
+            Self::Small(val_range, ref flat) => flat[node.idx() * val_range + edge_val.idx()],
             Self::Large(ref maps) => maps[node.idx()].get(&edge_val).copied().unwrap_or_default(),
         }
     }
 
     fn get_or_insert(&mut self, node: TrieNodeIdx, edge_val: V) -> (TrieNodeIdx, bool) {
         match *self {
-            Self::Small(key_range, ref mut flat) => {
-                let idx = node.idx() * key_range + edge_val.idx();
+            Self::Small(val_range, ref mut flat) => {
+                let idx = node.idx() * val_range + edge_val.idx();
                 if flat[idx].valid() {
                     (flat[idx], false)
                 } else {
-                    flat[idx] = TrieNodeIdx::from(flat.len() / key_range);
-                    flat.resize(flat.len() + key_range, TrieNodeIdx::INVALID);
+                    flat[idx] = TrieNodeIdx::from(flat.len() / val_range);
+                    flat.resize(flat.len() + val_range, TrieNodeIdx::INVALID);
                     (flat[idx], true)
                 }
             }
@@ -68,11 +68,11 @@ where
     M: Copy + Default + Eq,
     I: Iterator<Item = V> + Clone,
 {
-    pub fn new(key_range: usize) -> Self {
+    pub fn new(val_range: usize) -> Self {
         Self {
-            children: SubsetTrieChildren::new(key_range),
+            children: SubsetTrieChildren::new(val_range),
             markers: vec![M::default(); 1],
-            stack: Vec::with_capacity(key_range),
+            stack: Vec::with_capacity(val_range),
         }
     }
 
