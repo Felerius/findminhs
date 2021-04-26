@@ -140,6 +140,15 @@ fn find_forced_choices<'a>(
         .enumerate()
         .filter_map(move |(idx, mut blocked)| {
             let maybe_blocked_node = NodeIdx::from(idx);
+            blocked.sort_by_cached_key(|&edge_idx| {
+                instance
+                    .edge(edge_idx)
+                    .fold((0, 0), |(sum, max), node_idx| {
+                        let degree = instance.node_degree(node_idx);
+                        (sum + degree, max.max(degree))
+                    })
+            });
+
             blocked.retain(|&edge_idx| {
                 if instance
                     .edge(edge_idx)
