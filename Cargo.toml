@@ -6,6 +6,8 @@ edition = "2018"
 
 [features]
 debug-skipvec = []
+local-search = []
+time-reductions = []
 
 [dependencies]
 anyhow = "1.0"

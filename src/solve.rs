@@ -27,7 +27,7 @@ where
     ser.serialize_u64(hs.len() as u64)
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Default, Serialize)]
 pub struct Solution {
     /// Name of the input file for the instance
     pub file_name: String,
@@ -51,6 +51,46 @@ pub struct Solution {
 
     /// Seed for the random number generator
     pub seed: u64,
+
+    /// Total time spent running the greedy approximation
+    #[serde(serialize_with = "serialize_duration_as_seconds")]
+    pub runtime_greedy: Duration,
+
+    /// Total time spent running the solvable/unsolvable check
+    #[serde(serialize_with = "serialize_duration_as_seconds")]
+    pub runtime_solvability_check: Duration,
+
+    /// Total time spent calculating the lower bound packing
+    #[serde(serialize_with = "serialize_duration_as_seconds")]
+    pub runtime_packing: Duration,
+
+    /// Total time spent calculating the lower bound from the packing
+    #[serde(serialize_with = "serialize_duration_as_seconds")]
+    pub runtime_sum_lower_bound: Duration,
+
+    /// Total time spent finding edges of size 1
+    #[serde(serialize_with = "serialize_duration_as_seconds")]
+    pub runtime_size_1_edges: Duration,
+
+    /// Total time spent finding forced choices by extending the existing packing
+    #[serde(serialize_with = "serialize_duration_as_seconds")]
+    pub runtime_forced_choices_packing_extension: Duration,
+
+    /// Total time spent finding forced choices by recalculating the packing
+    #[serde(serialize_with = "serialize_duration_as_seconds")]
+    pub runtime_forced_choices_repacking: Duration,
+
+    /// Total time spent finding dominated nodes
+    #[serde(serialize_with = "serialize_duration_as_seconds")]
+    pub runtime_dominated_nodes: Duration,
+
+    /// Total time spent finding dominated edges
+    #[serde(serialize_with = "serialize_duration_as_seconds")]
+    pub runtime_dominated_edges: Duration,
+
+    /// Total time spent applying found reductions
+    #[serde(serialize_with = "serialize_duration_as_seconds")]
+    pub runtime_applying_reductions: Duration,
 }
 
 #[derive(Debug, Clone)]
@@ -67,7 +107,8 @@ fn branch_on(node_idx: NodeIdx, instance: &mut Instance, state: &mut State<impl 
     state.solution.branching_steps += 1;
 
     // Randomize branching order
-    let take_first: bool = state.rng.gen();
+    // let take_first: bool = state.rng.gen();
+    let take_first = true;
     for &take in &[take_first, !take_first] {
         if take {
             instance.delete_incident_edges(node_idx);
@@ -96,11 +137,8 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
         state.last_log_time = now;
     }
 
-    let (reduction_result, reduction) = reductions::reduce(
-        instance,
-        &mut state.partial_hs,
-        &mut state.solution.minimum_hs,
-    );
+    let (reduction_result, reduction) =
+        reductions::reduce(instance, &mut state.partial_hs, &mut state.solution);
     match reduction_result {
         ReductionResult::Solved => {
             if state.partial_hs.len() < state.solution.minimum_hs.len() {
@@ -152,10 +190,9 @@ pub fn solve<R: Rng + SeedableRng>(
             file_name,
             minimum_hs: instance.nodes().to_vec(),
             seed,
-            branching_steps: 0,
             lower_bound,
             upper_bound: greedy_hs.len(),
-            runtime: Duration::default(),
+            ..Solution::default()
         },
         last_log_time: Instant::now(),
     };

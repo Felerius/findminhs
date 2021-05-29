@@ -1,19 +1,25 @@
 use crate::{
     create_idx_struct,
-    data_structures::subset_trie::SubsetTrie,
-    instance::{EdgeIdx, Instance, NodeIdx},
+    instance::{EdgeIdx, Instance},
     small_indices::SmallIdx,
 };
+#[cfg(feature = "local-search")]
+use crate::{
+    data_structures::subset_trie::SubsetTrie, instance::NodeIdx, small_indices::IdxHashSet,
+};
+#[cfg(feature = "local-search")]
 use std::iter::Peekable;
 
 create_idx_struct!(PackingIdx);
 
+#[cfg(feature = "local-search")]
 #[derive(Clone)]
 struct SetMinusIterator<T, I1, I2>(Peekable<I1>, Peekable<I2>)
 where
     I1: Iterator<Item = T>,
     I2: Iterator<Item = T>;
 
+#[cfg(feature = "local-search")]
 impl<T, I1, I2> SetMinusIterator<T, I1, I2>
 where
     I1: Iterator<Item = T>,
@@ -30,6 +36,7 @@ where
     }
 }
 
+#[cfg(feature = "local-search")]
 impl<T, I1, I2> Iterator for SetMinusIterator<T, I1, I2>
 where
     I1: Iterator<Item = T>,
@@ -58,6 +65,7 @@ where
     }
 }
 
+#[cfg(feature = "local-search")]
 fn find_two_opt_swap(
     instance: &Instance,
     available_nodes: &mut Vec<NodeIdx>,
@@ -102,11 +110,16 @@ fn find_two_opt_swap(
     None
 }
 
-fn improve_packing_by_local_search(
-    instance: &Instance,
-    mut packing: Vec<EdgeIdx>,
-    mut remaining: Vec<EdgeIdx>,
-) -> (Vec<EdgeIdx>, Vec<EdgeIdx>) {
+#[cfg(feature = "local-search")]
+fn improve_packing_by_local_search(instance: &Instance, mut packing: Vec<EdgeIdx>) -> Vec<EdgeIdx> {
+    let packing_set: IdxHashSet<_> = packing.iter().copied().collect();
+    let mut remaining: Vec<_> = instance
+        .edges()
+        .iter()
+        .copied()
+        .filter(|edge_idx| !packing_set.contains(edge_idx))
+        .collect();
+
     // Reuse some allocations across local search iterations
     let mut hit_by = vec![PackingIdx::INVALID; instance.num_nodes_total()];
     let mut blocked_by: Vec<Vec<_>> = Vec::new();
@@ -149,17 +162,16 @@ fn improve_packing_by_local_search(
             }
         }
 
-        let (removed_edge_packing_idx, (added_edge1, added_edge2)) = if let Some(tuple) =
-            find_two_opt_swap(
-                instance,
-                &mut available_nodes,
-                &packing,
-                &blocked_by,
-                &hit_by,
-            ) {
-            tuple
-        } else {
-            return (packing, remaining);
+        let two_opt_swap = find_two_opt_swap(
+            instance,
+            &mut available_nodes,
+            &packing,
+            &blocked_by,
+            &hit_by,
+        );
+        let (removed_edge_packing_idx, (added_edge1, added_edge2)) = match two_opt_swap {
+            Some(tuple) => tuple,
+            None => return packing,
         };
 
         let removed_edge = packing[removed_edge_packing_idx.idx()];
@@ -198,33 +210,48 @@ fn improve_packing_by_local_search(
     }
 }
 
-pub fn pack_edges(instance: &Instance) -> (Vec<EdgeIdx>, Vec<EdgeIdx>) {
-    let mut edges: Vec<_> = instance.edges().iter().copied().collect();
-    edges.sort_by_cached_key(|&edge_idx| {
-        instance
-            .edge(edge_idx)
-            .fold((0, 0), |(sum, max), node_idx| {
-                let degree = instance.node_degree(node_idx);
-                (sum + degree, max.max(degree))
-            })
-    });
+pub fn pack_edges_without_local_search(
+    instance: &Instance,
+    edge_sort_keys: &[(u32, u32)],
+) -> Vec<EdgeIdx> {
+    let mut packing: Vec<_> = instance.edges().to_vec();
+    packing.sort_unstable_by_key(|&edge_idx| edge_sort_keys[edge_idx.idx()]);
 
-    let mut hit = vec![false; instance.num_nodes_total()];
-    let mut packing = Vec::new();
-    edges.retain(|&edge_idx| {
-        if instance.edge(edge_idx).all(|node_idx| !hit[node_idx.idx()]) {
-            packing.push(edge_idx);
-            for node_idx in instance.edge(edge_idx) {
-                hit[node_idx.idx()] = true;
-            }
-
-            false
-        } else {
-            true
+    let mut free = vec![true; instance.num_edges_total()];
+    packing.retain(|&edge_idx| {
+        if !free[edge_idx.idx()] {
+            return false;
         }
+
+        for node_idx in instance.edge(edge_idx) {
+            for node_edge_idx in instance.node(node_idx) {
+                free[node_edge_idx.idx()] = false;
+            }
+        }
+
+        true
     });
 
-    improve_packing_by_local_search(instance, packing, edges)
+    packing
+}
+
+pub fn pack_edges(instance: &Instance) -> (Vec<EdgeIdx>, Vec<(u32, u32)>) {
+    let mut edge_sort_keys = vec![(0, 0); instance.num_edges_total()];
+    for &edge_idx in instance.edges() {
+        edge_sort_keys[edge_idx.idx()] =
+            instance
+                .edge(edge_idx)
+                .fold((0, 0), |(sum, max), node_idx| {
+                    let degree = instance.node_degree(node_idx) as u32;
+                    (sum + degree, max.max(degree))
+                })
+    }
+    let packing = pack_edges_without_local_search(instance, &edge_sort_keys);
+
+    #[cfg(feature = "local-search")]
+    let packing = improve_packing_by_local_search(instance, packing);
+
+    (packing, edge_sort_keys)
 }
 
 pub fn calculate(instance: &Instance, packing: &[EdgeIdx], partial_size: usize) -> usize {

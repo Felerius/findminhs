@@ -3,9 +3,12 @@ use crate::{
     instance::{EdgeIdx, Instance, NodeIdx},
     lower_bound,
     small_indices::{IdxHashSet, SmallIdx},
+    solve::Solution,
 };
 use log::info;
-use std::{cmp::Reverse, collections::BinaryHeap};
+#[cfg(feature = "time-reductions")]
+use std::time::Instant;
+use std::{cmp::Reverse, collections::BinaryHeap, mem, time::Duration};
 
 #[derive(Copy, Clone, Debug)]
 enum ReducedItem {
@@ -108,10 +111,9 @@ fn find_size_1_edges(instance: &Instance) -> impl Iterator<Item = ReducedItem> {
     forced.into_iter().map(ReducedItem::ForcedNode)
 }
 
-fn find_forced_choices<'a>(
+fn find_forced_choices_by_packing_extension<'a>(
     instance: &'a Instance,
     packing: &'a [EdgeIdx],
-    remaining: &'a [EdgeIdx],
     partial_size: usize,
     smallest_known_size: usize,
 ) -> impl Iterator<Item = ReducedItem> + 'a {
@@ -123,7 +125,12 @@ fn find_forced_choices<'a>(
         }
     }
 
-    for &remaining_edge in remaining {
+    let packing_set: IdxHashSet<_> = packing.iter().copied().collect();
+    for &remaining_edge in instance.edges() {
+        if packing_set.contains(&remaining_edge) {
+            continue;
+        }
+
         let mut blocking_nodes_iter = instance
             .edge(remaining_edge)
             .filter(|&node_idx| hit[node_idx.idx()]);
@@ -181,6 +188,58 @@ fn find_forced_choices<'a>(
         })
 }
 
+fn find_forced_choice_by_repacking(
+    instance: &mut Instance,
+    mut edge_sort_keys: Vec<(u32, u32)>,
+    partial_size: usize,
+    smallest_known_size: usize,
+) -> (usize, Option<ReducedItem>) {
+    let mut nodes = instance.nodes().to_vec();
+    nodes.sort_unstable_by_key(|&node_idx| Reverse(instance.node_degree(node_idx)));
+
+    const NUM_TO_CHECK: usize = 1;
+    let maybe_forced_choice =
+        nodes
+            .into_iter()
+            .take(NUM_TO_CHECK)
+            .enumerate()
+            .find_map(move |(idx, node_idx)| {
+                let degree = instance.node_degree(node_idx) as u32;
+                for edge_idx in instance.node(node_idx) {
+                    let (sum, max) = &mut edge_sort_keys[edge_idx.idx()];
+                    *sum -= degree;
+                    if *max == degree {
+                        *max = 0;
+                    }
+                }
+                instance.delete_node(node_idx);
+
+                let packing =
+                    lower_bound::pack_edges_without_local_search(instance, &edge_sort_keys);
+                let bound = lower_bound::calculate(instance, &packing, partial_size);
+
+                instance.restore_node(node_idx);
+                for edge_idx in instance.node(node_idx) {
+                    let (sum, max) = &mut edge_sort_keys[edge_idx.idx()];
+                    *sum -= degree;
+                    if *max == 0 {
+                        *max = degree;
+                    }
+                }
+
+                if bound >= smallest_known_size {
+                    Some((idx, ReducedItem::ForcedNode(node_idx)))
+                } else {
+                    None
+                }
+            });
+
+    match maybe_forced_choice {
+        Some((idx, forced_choice)) => (idx + 1, Some(forced_choice)),
+        None => (NUM_TO_CHECK, None),
+    }
+}
+
 pub fn greedy_approx(instance: &Instance) -> Vec<NodeIdx> {
     let mut hit = vec![true; instance.num_edges_total()];
     for edge_idx in instance.edges() {
@@ -222,13 +281,31 @@ pub fn greedy_approx(instance: &Instance) -> Vec<NodeIdx> {
     hs
 }
 
+#[cfg(not(feature = "time-reductions"))]
+fn time_if_enabled<T>(_: &mut Duration, func: impl FnOnce() -> T) -> T {
+    func()
+}
+
+#[cfg(feature = "time-reductions")]
+fn time_if_enabled<T>(runtime: &mut Duration, func: impl FnOnce() -> T) -> T {
+    let before = Instant::now();
+    let result = func();
+    *runtime += before.elapsed();
+    result
+}
+
 pub fn reduce(
     instance: &mut Instance,
     partial_hs: &mut Vec<NodeIdx>,
-    minimum_hs: &mut Vec<NodeIdx>,
+    solution: &mut Solution,
 ) -> (ReductionResult, Reduction) {
     let mut reduced = Vec::new();
-    let result = loop {
+
+    // Take minimum HS out of solution during this function to avoid lifetime problems.
+    // Must *always* be put back again before returning
+    let mut minimum_hs = mem::take(&mut solution.minimum_hs);
+
+    time_if_enabled(&mut solution.runtime_greedy, || {
         let greedy = greedy_approx(instance);
         if partial_hs.len() + greedy.len() < minimum_hs.len() {
             minimum_hs.clear();
@@ -241,55 +318,91 @@ pub fn reduce(
                 greedy.len()
             );
         }
+    });
+
+    let result = loop {
         if partial_hs.len() >= minimum_hs.len() {
             break ReductionResult::Unsolvable;
         }
 
-        match instance
-            .edges()
-            .iter()
-            .map(|&edge_idx| instance.edge_degree(edge_idx))
-            .min()
-        {
+        let minimum_edge_degree = time_if_enabled(&mut solution.runtime_solvability_check, || {
+            instance
+                .edges()
+                .iter()
+                .map(|&edge_idx| instance.edge_degree(edge_idx))
+                .min()
+        });
+        match minimum_edge_degree {
             None => break ReductionResult::Solved,
             Some(0) => break ReductionResult::Unsolvable,
             Some(_) => {}
         }
 
-        let (packing, remaining) = lower_bound::pack_edges(instance);
-        if lower_bound::calculate(instance, &packing, partial_hs.len()) >= minimum_hs.len() {
+        let (packing, edge_sort_keys) = time_if_enabled(&mut solution.runtime_packing, || {
+            lower_bound::pack_edges(instance)
+        });
+        let full_lower_bound = time_if_enabled(&mut solution.runtime_sum_lower_bound, || {
+            lower_bound::calculate(instance, &packing, partial_hs.len())
+        });
+        if full_lower_bound >= minimum_hs.len() {
             break ReductionResult::Unsolvable;
         }
 
         let len_before = reduced.len();
-        reduced.extend(find_size_1_edges(instance));
+        time_if_enabled(&mut solution.runtime_size_1_edges, || {
+            reduced.extend(find_size_1_edges(instance))
+        });
 
         if reduced.len() == len_before {
-            reduced.extend(find_forced_choices(
-                instance,
-                &packing,
-                &remaining,
-                partial_hs.len(),
-                minimum_hs.len(),
-            ));
+            time_if_enabled(
+                &mut solution.runtime_forced_choices_packing_extension,
+                || {
+                    reduced.extend(find_forced_choices_by_packing_extension(
+                        instance,
+                        &packing,
+                        partial_hs.len(),
+                        minimum_hs.len(),
+                    ));
+                },
+            );
         }
 
         if reduced.len() == len_before {
-            reduced.extend(find_dominated_nodes(instance));
+            let (_nodes_checked, maybe_forced_choice) =
+                time_if_enabled(&mut solution.runtime_forced_choices_repacking, || {
+                    find_forced_choice_by_repacking(
+                        instance,
+                        edge_sort_keys,
+                        partial_hs.len(),
+                        minimum_hs.len(),
+                    )
+                });
+            reduced.extend(maybe_forced_choice);
         }
 
         if reduced.len() == len_before {
-            reduced.extend(find_dominated_edges(instance));
+            time_if_enabled(&mut solution.runtime_dominated_nodes, || {
+                reduced.extend(find_dominated_nodes(instance))
+            });
+        }
+
+        if reduced.len() == len_before {
+            time_if_enabled(&mut solution.runtime_dominated_edges, || {
+                reduced.extend(find_dominated_edges(instance))
+            });
         }
 
         if reduced.len() == len_before {
             break ReductionResult::Finished;
         }
 
-        for reduced_item in &reduced[len_before..] {
-            reduced_item.apply(instance, partial_hs);
-        }
+        time_if_enabled(&mut solution.runtime_applying_reductions, || {
+            for reduced_item in &reduced[len_before..] {
+                reduced_item.apply(instance, partial_hs);
+            }
+        });
     };
 
+    solution.minimum_hs = minimum_hs;
     (result, Reduction(reduced))
 }
