@@ -4,7 +4,6 @@ use crate::instance::Instance;
 use anyhow::{anyhow, Result};
 use csv::WriterBuilder;
 use log::info;
-use rand::{rngs::OsRng, Rng};
 use std::{
     ffi::OsStr,
     fs::{File, OpenOptions},
@@ -59,10 +58,7 @@ fn main() -> Result<()> {
     }
 
     info!("Solving {:?}", &opts.input_file);
-    let seed: u64 = OsRng.gen();
-    info!("RNG seed: {:#018x}", seed);
-
-    let solution = solve::solve::<rand_pcg::Pcg64Mcg>(instance, file_name, seed)?;
+    let solution = solve::solve(instance, file_name)?;
     info!("Smallest HS has size {}", solution.minimum_hs.len());
 
     if let Some(csv_file) = opts.csv {

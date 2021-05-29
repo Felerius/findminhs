@@ -6,7 +6,6 @@ use crate::{
 };
 use anyhow::Result;
 use log::{debug, info, trace, warn};
-use rand::{Rng, SeedableRng};
 use serde::{Serialize, Serializer};
 use std::time::{Duration, Instant};
 
@@ -48,9 +47,6 @@ pub struct Solution {
     /// Total time required to solve the instance
     #[serde(serialize_with = "serialize_duration_as_seconds")]
     pub runtime: Duration,
-
-    /// Seed for the random number generator
-    pub seed: u64,
 
     /// Total time spent running the greedy approximation
     #[serde(serialize_with = "serialize_duration_as_seconds")]
@@ -94,14 +90,13 @@ pub struct Solution {
 }
 
 #[derive(Debug, Clone)]
-struct State<R: Rng> {
-    rng: R,
+struct State {
     partial_hs: Vec<NodeIdx>,
     solution: Solution,
     last_log_time: Instant,
 }
 
-fn branch_on(node_idx: NodeIdx, instance: &mut Instance, state: &mut State<impl Rng>) {
+fn branch_on(node_idx: NodeIdx, instance: &mut Instance, state: &mut State) {
     trace!("Branching on {}", node_idx);
     instance.delete_node(node_idx);
     state.solution.branching_steps += 1;
@@ -127,7 +122,7 @@ fn branch_on(node_idx: NodeIdx, instance: &mut Instance, state: &mut State<impl 
     instance.restore_node(node_idx);
 }
 
-fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
+fn solve_recursive(instance: &mut Instance, state: &mut State) {
     let now = Instant::now();
     if (now - state.last_log_time).as_secs() >= ITER_LOG_GAP {
         info!(
@@ -171,11 +166,7 @@ fn solve_recursive(instance: &mut Instance, state: &mut State<impl Rng>) {
     reduction.restore(instance, &mut state.partial_hs);
 }
 
-pub fn solve<R: Rng + SeedableRng>(
-    mut instance: Instance,
-    file_name: String,
-    seed: u64,
-) -> Result<Solution> {
+pub fn solve(mut instance: Instance, file_name: String) -> Result<Solution> {
     let greedy_hs = reductions::greedy_approx(&instance);
     let (packing, _) = lower_bound::pack_edges(&instance);
     let lower_bound = lower_bound::calculate(&instance, &packing, 0);
@@ -184,12 +175,10 @@ pub fn solve<R: Rng + SeedableRng>(
 
     let time_start = Instant::now();
     let mut state = State {
-        rng: R::seed_from_u64(seed),
         partial_hs: Vec::new(),
         solution: Solution {
             file_name,
             minimum_hs: instance.nodes().to_vec(),
-            seed,
             lower_bound,
             upper_bound: greedy_hs.len(),
             ..Solution::default()
