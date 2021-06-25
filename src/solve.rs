@@ -2,7 +2,7 @@ use crate::{
     instance::{Instance, NodeIdx},
     lower_bound::{self, PackingBound},
     reductions::{self, ReductionResult},
-    report::{ReductionStats, Report, RootBounds, RuntimeStats, Settings},
+    report::{ReductionStats, Report, RootBounds, RuntimeStats, Settings, UpperBoundImprovement},
     small_indices::IdxHashSet,
 };
 use log::{debug, info, trace, warn};
@@ -11,54 +11,52 @@ use std::time::Instant;
 const ITERATION_LOG_INTERVAL_SECS: u64 = 60;
 
 #[derive(Debug, Clone)]
-struct State {
-    partial_hs: Vec<NodeIdx>,
-    minimum_hs: Vec<NodeIdx>,
-    report: Report,
-    last_log_time: Instant,
+pub struct State {
+    pub partial_hs: Vec<NodeIdx>,
+    pub minimum_hs: Vec<NodeIdx>,
+    pub solve_start_time: Instant,
+    pub last_log_time: Instant,
 }
 
-fn branch_on(node: NodeIdx, instance: &mut Instance, state: &mut State) {
+fn branch_on(node: NodeIdx, instance: &mut Instance, state: &mut State, report: &mut Report) {
     trace!("Branching on {}", node);
-    state.report.branching_steps += 1;
+    report.branching_steps += 1;
     instance.delete_node(node);
 
     instance.delete_incident_edges(node);
     state.partial_hs.push(node);
-    solve_recursive(instance, state);
+    solve_recursive(instance, state, report);
     debug_assert_eq!(state.partial_hs.last().copied(), Some(node));
     state.partial_hs.pop();
     instance.restore_incident_edges(node);
 
-    solve_recursive(instance, state);
+    solve_recursive(instance, state, report);
 
     instance.restore_node(node);
 }
 
-fn solve_recursive(instance: &mut Instance, state: &mut State) {
+fn solve_recursive(instance: &mut Instance, state: &mut State, report: &mut Report) {
     let now = Instant::now();
     if (now - state.last_log_time).as_secs() >= ITERATION_LOG_INTERVAL_SECS {
         info!(
             "Running on {} for {} branching steps",
-            &state.report.file_name, state.report.branching_steps
+            &report.file_name, report.branching_steps
         );
         state.last_log_time = now;
     }
 
-    let (reduction_result, reduction) = reductions::reduce(
-        instance,
-        &mut state.partial_hs,
-        &mut state.minimum_hs,
-        &mut state.report.runtimes,
-        &mut state.report.reductions,
-        &state.report.settings,
-    );
+    let (reduction_result, reduction) = reductions::reduce(instance, state, report);
     match reduction_result {
         ReductionResult::Solved => {
             if state.partial_hs.len() < state.minimum_hs.len() {
                 info!("Found HS of size {} by branching", state.partial_hs.len());
                 state.minimum_hs.clear();
                 state.minimum_hs.extend(state.partial_hs.iter().copied());
+                report.upper_bound_improvements.push(UpperBoundImprovement {
+                    new_bound: state.minimum_hs.len(),
+                    branching_steps: report.branching_steps,
+                    runtime: state.solve_start_time.elapsed(),
+                });
             } else {
                 warn!(
                     "Found HS is not smaller than best known ({} vs. {}), should have been pruned",
@@ -75,7 +73,7 @@ fn solve_recursive(instance: &mut Instance, state: &mut State) {
                 .copied()
                 .max_by_key(|&node| instance.node_degree(node))
                 .expect("Branching on an empty instance");
-            branch_on(node, instance, state);
+            branch_on(node, instance, state, report);
         }
     }
 
@@ -105,26 +103,26 @@ pub fn solve(mut instance: Instance, file_name: String, settings: Settings) -> R
         root_bounds,
         runtimes: RuntimeStats::default(),
         reductions: ReductionStats::default(),
+        upper_bound_improvements: Vec::new(),
     };
     report
         .reductions
         .costly_discard_packing_from_scratch_steps_per_run =
         vec![0; packing_from_scratch_limit + 1];
 
-    let time_start = Instant::now();
     let mut state = State {
         partial_hs: Vec::new(),
         minimum_hs: instance.nodes().to_vec(),
-        report,
-        last_log_time: time_start,
+        last_log_time: Instant::now(),
+        solve_start_time: Instant::now(),
     };
-    solve_recursive(&mut instance, &mut state);
-    state.report.runtimes.total = time_start.elapsed();
-    state.report.opt = state.minimum_hs.len();
+    solve_recursive(&mut instance, &mut state, &mut report);
+    report.runtimes.total = state.solve_start_time.elapsed();
+    report.opt = state.minimum_hs.len();
 
     info!(
         "Solving took {} branching steps in {:.2?}",
-        state.report.branching_steps, state.report.runtimes.total
+        report.branching_steps, report.runtimes.total
     );
     debug!(
         "Final HS (size {}): {:?}",
@@ -141,5 +139,5 @@ pub fn solve(mut instance: Instance, file_name: String, settings: Settings) -> R
         assert!(hit, "edge {} not hit", edge);
     }
 
-    state.report
+    report
 }

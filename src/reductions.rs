@@ -2,8 +2,9 @@ use crate::{
     data_structures::{subset_trie::SubsetTrie, superset_trie::SupersetTrie},
     instance::{EdgeIdx, Instance, NodeIdx},
     lower_bound::{self, EfficiencyBound, PackingBound},
-    report::{GreedyMode, ReductionStats, RuntimeStats, Settings},
+    report::{GreedyMode, Report, Settings, UpperBoundImprovement},
     small_indices::{IdxHashSet, SmallIdx},
+    solve::State,
 };
 use log::info;
 use std::{
@@ -215,25 +216,25 @@ pub fn calc_greedy_approximation(instance: &Instance) -> Vec<NodeIdx> {
     hs
 }
 
-fn recalculate_greedy_upper_bound(
-    instance: &Instance,
-    partial_hs: &[NodeIdx],
-    minimum_hs: &mut Vec<NodeIdx>,
-    runtimes: &mut RuntimeStats,
-    stats: &mut ReductionStats,
-) {
-    stats.greedy_runs += 1;
-    collect_time_info(&mut runtimes.greedy, || {
+fn recalculate_greedy_upper_bound(instance: &Instance, state: &mut State, report: &mut Report) {
+    report.reductions.greedy_runs += 1;
+    let improvements_list_ref = &mut report.upper_bound_improvements;
+    let branching_steps = report.branching_steps;
+    collect_time_info(&mut report.runtimes.greedy, || {
         let greedy = calc_greedy_approximation(instance);
-        if partial_hs.len() + greedy.len() < minimum_hs.len() {
-            stats.greedy_bound_improvements += 1;
-            minimum_hs.clear();
-            minimum_hs.extend(partial_hs.iter().copied());
-            minimum_hs.extend(greedy.iter().copied());
+        if state.partial_hs.len() + greedy.len() < state.minimum_hs.len() {
+            state.minimum_hs.clear();
+            state.minimum_hs.extend(state.partial_hs.iter().copied());
+            state.minimum_hs.extend(greedy.iter().copied());
+            improvements_list_ref.push(UpperBoundImprovement {
+                new_bound: state.minimum_hs.len(),
+                branching_steps,
+                runtime: state.solve_start_time.elapsed(),
+            });
             info!(
                 "Found HS of size {} using greedy (partial {} + greedy {})",
-                minimum_hs.len(),
-                partial_hs.len(),
+                state.minimum_hs.len(),
+                state.partial_hs.len(),
                 greedy.len()
             );
         }
@@ -266,20 +267,17 @@ fn run_reduction<I>(
 
 pub fn reduce(
     instance: &mut Instance,
-    partial_hs: &mut Vec<NodeIdx>,
-    minimum_hs: &mut Vec<NodeIdx>,
-    runtimes: &mut RuntimeStats,
-    stats: &mut ReductionStats,
-    settings: &Settings,
+    state: &mut State,
+    report: &mut Report,
 ) -> (ReductionResult, Reduction) {
     let mut reduced_items = Vec::new();
 
-    if settings.greedy_mode == GreedyMode::Once {
-        recalculate_greedy_upper_bound(instance, &partial_hs, minimum_hs, runtimes, stats);
+    if report.settings.greedy_mode == GreedyMode::Once {
+        recalculate_greedy_upper_bound(instance, state, report);
     }
 
     let result = loop {
-        if partial_hs.len() >= minimum_hs.len() {
+        if state.partial_hs.len() >= state.minimum_hs.len() {
             break ReductionResult::Unsolvable;
         }
 
@@ -287,41 +285,41 @@ pub fn reduce(
             break ReductionResult::Solved;
         }
 
-        if settings.greedy_mode == GreedyMode::AlwaysBeforeBounds {
-            recalculate_greedy_upper_bound(instance, &partial_hs, minimum_hs, runtimes, stats);
-            if partial_hs.len() >= minimum_hs.len() {
+        if report.settings.greedy_mode == GreedyMode::AlwaysBeforeBounds {
+            recalculate_greedy_upper_bound(instance, state, report);
+            if state.partial_hs.len() >= state.minimum_hs.len() {
                 break ReductionResult::Unsolvable;
             }
         }
 
-        let mut lower_bound_breakpoint = minimum_hs.len() - partial_hs.len();
-        if settings.enable_max_degree_bound {
-            let max_degree_bound = collect_time_info(&mut runtimes.max_degree_bound, || {
+        let mut lower_bound_breakpoint = state.minimum_hs.len() - state.partial_hs.len();
+        if report.settings.enable_max_degree_bound {
+            let max_degree_bound = collect_time_info(&mut report.runtimes.max_degree_bound, || {
                 lower_bound::calc_max_degree_bound(instance).unwrap_or(usize::MAX)
             });
             if max_degree_bound >= lower_bound_breakpoint {
-                stats.max_degree_bound_breaks += 1;
+                report.reductions.max_degree_bound_breaks += 1;
                 break ReductionResult::Unsolvable;
             }
         }
 
-        if settings.enable_sum_degree_bound {
-            let sum_degree_bound = collect_time_info(&mut runtimes.sum_degree_bound, || {
+        if report.settings.enable_sum_degree_bound {
+            let sum_degree_bound = collect_time_info(&mut report.runtimes.sum_degree_bound, || {
                 lower_bound::calc_sum_degree_bound(instance)
             });
             if sum_degree_bound >= lower_bound_breakpoint {
-                stats.sum_degree_bound_breaks += 1;
+                report.reductions.sum_degree_bound_breaks += 1;
                 break ReductionResult::Unsolvable;
             }
         }
 
-        let discard_efficiency_bounds = if settings.enable_efficiency_bound {
+        let discard_efficiency_bounds = if report.settings.enable_efficiency_bound {
             let (efficiency_bound, discard_efficiency_bounds) =
-                collect_time_info(&mut runtimes.efficiency_bound, || {
+                collect_time_info(&mut report.runtimes.efficiency_bound, || {
                     lower_bound::calc_efficiency_bound(instance)
                 });
             if efficiency_bound.round().unwrap_or(usize::MAX) >= lower_bound_breakpoint {
-                stats.efficiency_degree_bound_breaks += 1;
+                report.reductions.efficiency_degree_bound_breaks += 1;
                 break ReductionResult::Unsolvable;
             }
             discard_efficiency_bounds
@@ -329,12 +327,13 @@ pub fn reduce(
             Vec::new()
         };
 
-        let packing_bound = if settings.enable_packing_bound {
-            let packing_bound = collect_time_info(&mut runtimes.packing_bound, || {
-                PackingBound::new(instance, settings)
+        let packing_bound = if report.settings.enable_packing_bound {
+            let settings_ref = &report.settings;
+            let packing_bound = collect_time_info(&mut report.runtimes.packing_bound, || {
+                PackingBound::new(instance, settings_ref)
             });
             if packing_bound.bound() >= lower_bound_breakpoint {
-                stats.packing_bound_breaks += 1;
+                report.reductions.packing_bound_breaks += 1;
                 break ReductionResult::Unsolvable;
             }
             packing_bound
@@ -342,13 +341,13 @@ pub fn reduce(
             PackingBound::default()
         };
 
-        if settings.enable_packing_bound && settings.enable_sum_over_packing_bound {
+        if report.settings.enable_packing_bound && report.settings.enable_sum_over_packing_bound {
             let sum_over_packing_bound =
-                collect_time_info(&mut runtimes.sum_over_packing_bound, || {
+                collect_time_info(&mut report.runtimes.sum_over_packing_bound, || {
                     packing_bound.calc_sum_over_packing_bound(instance)
                 });
             if sum_over_packing_bound >= lower_bound_breakpoint {
-                stats.sum_over_packing_bound_breaks += 1;
+                report.reductions.sum_over_packing_bound_breaks += 1;
                 break ReductionResult::Unsolvable;
             }
         }
@@ -356,9 +355,9 @@ pub fn reduce(
         let unchanged_len = reduced_items.len();
         run_reduction(
             &mut reduced_items,
-            &mut runtimes.forced_vertex,
-            &mut stats.forced_vertex_runs,
-            &mut stats.forced_vertices_found,
+            &mut report.runtimes.forced_vertex,
+            &mut report.reductions.forced_vertex_runs,
+            &mut report.reductions.forced_vertices_found,
             || find_forced_nodes(instance),
         );
 
@@ -370,8 +369,8 @@ pub fn reduce(
             run_reduction(
                 &mut reduced_items,
                 &mut dummy_duration,
-                &mut stats.costly_discard_efficiency_runs,
-                &mut stats.costly_discard_efficiency_vertices_found,
+                &mut report.reductions.costly_discard_efficiency_runs,
+                &mut report.reductions.costly_discard_efficiency_vertices_found,
                 || {
                     find_costly_discards_using_efficiency_bound(
                         instance,
@@ -385,9 +384,11 @@ pub fn reduce(
         if reduced_items.len() == unchanged_len {
             run_reduction(
                 &mut reduced_items,
-                &mut runtimes.costly_discard_packing_update,
-                &mut stats.costly_discard_packing_update_runs,
-                &mut stats.costly_discard_packing_update_vertices_found,
+                &mut report.runtimes.costly_discard_packing_update,
+                &mut report.reductions.costly_discard_packing_update_runs,
+                &mut report
+                    .reductions
+                    .costly_discard_packing_update_vertices_found,
                 || {
                     find_costly_discards_using_packing_update(
                         instance,
@@ -399,32 +400,35 @@ pub fn reduce(
         }
 
         if reduced_items.len() == unchanged_len
-            && settings.greedy_mode == GreedyMode::AlwaysBeforeExpensiveReductions
+            && report.settings.greedy_mode == GreedyMode::AlwaysBeforeExpensiveReductions
         {
-            recalculate_greedy_upper_bound(instance, &partial_hs, minimum_hs, runtimes, stats);
-            if partial_hs.len() >= minimum_hs.len() {
+            recalculate_greedy_upper_bound(instance, state, report);
+            if state.partial_hs.len() >= state.minimum_hs.len() {
                 break ReductionResult::Unsolvable;
             }
-            lower_bound_breakpoint = minimum_hs.len() - partial_hs.len();
+            lower_bound_breakpoint = state.minimum_hs.len() - state.partial_hs.len();
         }
 
         if reduced_items.len() == unchanged_len {
-            let table_ref = &mut stats.costly_discard_packing_from_scratch_steps_per_run;
+            let table_ref = &mut report
+                .reductions
+                .costly_discard_packing_from_scratch_steps_per_run;
+            let settings_ref = &report.settings;
             let mut dummy_counter = 0;
             run_reduction(
                 &mut reduced_items,
-                &mut runtimes.costly_discard_packing_from_scratch,
-                &mut stats.costly_discard_packing_from_scratch_runs,
+                &mut report.runtimes.costly_discard_packing_from_scratch,
+                &mut report.reductions.costly_discard_packing_from_scratch_runs,
                 &mut dummy_counter,
                 || {
                     let result = find_costly_discard_using_packing_from_scratch(
                         instance,
                         lower_bound_breakpoint,
-                        settings,
+                        settings_ref,
                     );
                     match result {
                         None => {
-                            table_ref[settings.packing_from_scratch_limit] += 1;
+                            table_ref[settings_ref.packing_from_scratch_limit] += 1;
                             None
                         }
                         Some((item, idx)) => {
@@ -439,9 +443,9 @@ pub fn reduce(
         if reduced_items.len() == unchanged_len {
             run_reduction(
                 &mut reduced_items,
-                &mut runtimes.vertex_domination,
-                &mut stats.vertex_dominations_runs,
-                &mut stats.vertex_dominations_vertices_found,
+                &mut report.runtimes.vertex_domination,
+                &mut report.reductions.vertex_dominations_runs,
+                &mut report.reductions.vertex_dominations_vertices_found,
                 || find_dominated_nodes(instance),
             );
         }
@@ -449,9 +453,9 @@ pub fn reduce(
         if reduced_items.len() == unchanged_len {
             run_reduction(
                 &mut reduced_items,
-                &mut runtimes.edge_domination,
-                &mut stats.edge_dominations_runs,
-                &mut stats.edge_dominations_edges_found,
+                &mut report.runtimes.edge_domination,
+                &mut report.reductions.edge_dominations_runs,
+                &mut report.reductions.edge_dominations_edges_found,
                 || find_dominated_edges(instance),
             );
         }
@@ -460,9 +464,9 @@ pub fn reduce(
             break ReductionResult::Finished;
         }
 
-        collect_time_info(&mut runtimes.applying_reductions, || {
+        collect_time_info(&mut report.runtimes.applying_reductions, || {
             for reduced_item in &reduced_items[unchanged_len..] {
-                reduced_item.apply(instance, partial_hs);
+                reduced_item.apply(instance, &mut state.partial_hs);
             }
         });
     };

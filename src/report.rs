@@ -50,6 +50,15 @@ pub struct RuntimeStats {
     pub applying_reductions: Duration,
 }
 
+#[derive(Debug, Clone, Serialize)]
+pub struct UpperBoundImprovement {
+    pub new_bound: usize,
+    pub branching_steps: usize,
+
+    #[serde(serialize_with = "serialize_duration_as_seconds")]
+    pub runtime: Duration,
+}
+
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct ReductionStats {
     pub max_degree_bound_breaks: usize,
@@ -59,7 +68,6 @@ pub struct ReductionStats {
     pub sum_over_packing_bound_breaks: usize,
 
     pub greedy_runs: usize,
-    pub greedy_bound_improvements: usize,
     pub forced_vertex_runs: usize,
     pub forced_vertices_found: usize,
     pub costly_discard_efficiency_runs: usize,
@@ -123,6 +131,7 @@ pub struct Report {
     pub file_name: String,
     pub opt: usize,
     pub branching_steps: usize,
+    pub upper_bound_improvements: Vec<UpperBoundImprovement>,
     pub settings: Settings,
     pub root_bounds: RootBounds,
     pub runtimes: RuntimeStats,
