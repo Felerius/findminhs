@@ -74,8 +74,8 @@ impl Instance {
                 SkipVec::try_sorted_from(numbers.map(|num_result| {
                     num_result.map(|num| (NodeIdx::from(num), EntryIdx::INVALID))
                 }))?;
-            for (_, (node_idx, _)) in &incidences {
-                node_degrees[node_idx.idx()] += 1;
+            for (_, (node, _)) in &incidences {
+                node_degrees[node.idx()] += 1;
             }
             edge_incidences.push(incidences);
         }
@@ -85,15 +85,14 @@ impl Instance {
             .map(|&len| SkipVec::with_len(len))
             .collect();
         let mut rem_node_degrees = node_degrees;
-        for (edge_idx, incidences) in edge_incidences.iter_mut().enumerate() {
-            let edge_idx = EdgeIdx::from(edge_idx);
+        for (edge, incidences) in edge_incidences.iter_mut().enumerate() {
+            let edge = EdgeIdx::from(edge);
             for (edge_entry_idx, edge_entry) in incidences.iter_mut() {
-                let node_idx = edge_entry.0.idx();
-                let node_entry_idx = node_incidences[node_idx].len() - rem_node_degrees[node_idx];
-                rem_node_degrees[node_idx] -= 1;
+                let node = edge_entry.0.idx();
+                let node_entry_idx = node_incidences[node].len() - rem_node_degrees[node];
+                rem_node_degrees[node] -= 1;
                 edge_entry.1 = EntryIdx::from(node_entry_idx);
-                node_incidences[node_idx][node_entry_idx] =
-                    (edge_idx, EntryIdx::from(edge_entry_idx));
+                node_incidences[node][node_entry_idx] = (edge, EntryIdx::from(edge_entry_idx));
             }
         }
 
@@ -126,21 +125,21 @@ impl Instance {
     /// Edges incident to a node, sorted by increasing indices.
     pub fn node(
         &self,
-        node_idx: NodeIdx,
+        node: NodeIdx,
     ) -> impl Iterator<Item = EdgeIdx> + ExactSizeIterator + Clone + '_ {
-        self.node_incidences[node_idx.idx()]
+        self.node_incidences[node.idx()]
             .iter()
-            .map(|(_, (edge_idx, _))| *edge_idx)
+            .map(|(_, (edge, _))| *edge)
     }
 
     /// Nodes incident to an edge, sorted by increasing indices.
     pub fn edge(
         &self,
-        edge_idx: EdgeIdx,
+        edge: EdgeIdx,
     ) -> impl Iterator<Item = NodeIdx> + ExactSizeIterator + Clone + '_ {
-        self.edge_incidences[edge_idx.idx()]
+        self.edge_incidences[edge.idx()]
             .iter()
-            .map(|(_, (node_idx, _))| *node_idx)
+            .map(|(_, (node, _))| *node)
     }
 
     /// Alive nodes in the instance, in arbitrary order.
@@ -153,77 +152,77 @@ impl Instance {
         &self.edges
     }
 
-    pub fn node_degree(&self, node_idx: NodeIdx) -> usize {
-        self.node_incidences[node_idx.idx()].len()
+    pub fn node_degree(&self, node: NodeIdx) -> usize {
+        self.node_incidences[node.idx()].len()
     }
 
-    pub fn edge_degree(&self, edge_idx: EdgeIdx) -> usize {
-        self.edge_incidences[edge_idx.idx()].len()
+    pub fn edge_size(&self, edge: EdgeIdx) -> usize {
+        self.edge_incidences[edge.idx()].len()
     }
 
     /// Deletes a node from the instance.
-    pub fn delete_node(&mut self, node_idx: NodeIdx) {
-        trace!("Deleting node {}", node_idx);
-        for (_idx, (edge_idx, entry_idx)) in &self.node_incidences[node_idx.idx()] {
-            self.edge_incidences[edge_idx.idx()].delete(entry_idx.idx());
+    pub fn delete_node(&mut self, node: NodeIdx) {
+        trace!("Deleting node {}", node);
+        for (_idx, (edge, entry_idx)) in &self.node_incidences[node.idx()] {
+            self.edge_incidences[edge.idx()].delete(entry_idx.idx());
         }
-        self.nodes.delete(node_idx.idx());
+        self.nodes.delete(node.idx());
     }
 
     /// Deletes an edge from the instance.
-    pub fn delete_edge(&mut self, edge_idx: EdgeIdx) {
-        trace!("Deleting edge {}", edge_idx);
-        for (_idx, (node_idx, entry_idx)) in &self.edge_incidences[edge_idx.idx()] {
-            self.node_incidences[node_idx.idx()].delete(entry_idx.idx());
+    pub fn delete_edge(&mut self, edge: EdgeIdx) {
+        trace!("Deleting edge {}", edge);
+        for (_idx, (node, entry_idx)) in &self.edge_incidences[edge.idx()] {
+            self.node_incidences[node.idx()].delete(entry_idx.idx());
         }
-        self.edges.delete(edge_idx.idx());
+        self.edges.delete(edge.idx());
     }
 
     /// Restores a previously deleted node.
     ///
     /// All restore operations (node or edge) must be done in reverse order of
     /// the corresponding deletions to produce sensible results.
-    pub fn restore_node(&mut self, node_idx: NodeIdx) {
-        trace!("Restoring node {}", node_idx);
-        for (_idx, (edge_idx, entry_idx)) in self.node_incidences[node_idx.idx()].iter().rev() {
-            self.edge_incidences[edge_idx.idx()].restore(entry_idx.idx());
+    pub fn restore_node(&mut self, node: NodeIdx) {
+        trace!("Restoring node {}", node);
+        for (_idx, (edge, entry_idx)) in self.node_incidences[node.idx()].iter().rev() {
+            self.edge_incidences[edge.idx()].restore(entry_idx.idx());
         }
-        self.nodes.restore(node_idx.idx());
+        self.nodes.restore(node.idx());
     }
 
     /// Restores a previously deleted edge.
     ///
     /// All restore operations (node or edge) must be done in reverse order of
     /// the corresponding deletions to produce sensible results.
-    pub fn restore_edge(&mut self, edge_idx: EdgeIdx) {
-        trace!("Restoring edge {}", edge_idx);
-        for (_idx, (node_idx, entry_idx)) in self.edge_incidences[edge_idx.idx()].iter().rev() {
-            self.node_incidences[node_idx.idx()].restore(entry_idx.idx());
+    pub fn restore_edge(&mut self, edge: EdgeIdx) {
+        trace!("Restoring edge {}", edge);
+        for (_idx, (node, entry_idx)) in self.edge_incidences[edge.idx()].iter().rev() {
+            self.node_incidences[node.idx()].restore(entry_idx.idx());
         }
-        self.edges.restore(edge_idx.idx());
+        self.edges.restore(edge.idx());
     }
 
     /// Deletes all edges incident to a node.
     ///
     /// The node itself must have already been deleted.
-    pub fn delete_incident_edges(&mut self, node_idx: NodeIdx) {
-        // We want to iterate over the incidence of `node_idx` while deleting
+    pub fn delete_incident_edges(&mut self, node: NodeIdx) {
+        // We want to iterate over the incidence of `node` while deleting
         // edges, which in turn changes node incidences. This is safe, since
-        // `node_idx` itself was already deleted. To make the borrow checker
-        // accept this, we temporarily move `node_idx` incidence to a local
+        // `node` itself was already deleted. To make the borrow checker
+        // accept this, we temporarily move `node` incidence to a local
         // variable, replacing it with an empty list. This should not be much
         // slower than unsafe alternatives, since an incidence list is only
         // 28 bytes large.
-        trace!("Deleting all edges incident to {}", node_idx);
+        trace!("Deleting all edges incident to {}", node);
         debug_assert!(
-            self.nodes.is_deleted(node_idx.idx()),
+            self.nodes.is_deleted(node.idx()),
             "Node passed to delete_incident_edges must be deleted"
         );
-        let incidence = mem::take(&mut self.node_incidences[node_idx.idx()]);
-        for (_, (edge_idx, _)) in &incidence {
-            self.delete_edge(*edge_idx);
+        let incidence = mem::take(&mut self.node_incidences[node.idx()]);
+        for (_, (edge, _)) in &incidence {
+            self.delete_edge(*edge);
         }
-        self.node_incidences[node_idx.idx()] = incidence;
+        self.node_incidences[node.idx()] = incidence;
     }
 
     /// Restores all incident edges to a node.
@@ -231,24 +230,23 @@ impl Instance {
     /// This reverses the effect of `delete_incident_edges`. As with all other
     /// `restore_*` methods, this must be done in reverse order of deletions.
     /// In particular, the node itself must still be deleted.
-    pub fn restore_incident_edges(&mut self, node_idx: NodeIdx) {
-        trace!("Restoring all edges incident to {}", node_idx);
+    pub fn restore_incident_edges(&mut self, node: NodeIdx) {
+        trace!("Restoring all edges incident to {}", node);
         debug_assert!(
-            self.nodes.is_deleted(node_idx.idx()),
+            self.nodes.is_deleted(node.idx()),
             "Node passed to restore_incident_edges must be deleted"
         );
 
         // See `delete_incident_edges` for an explanation of this swapping around
-        let incidence = mem::take(&mut self.node_incidences[node_idx.idx()]);
+        let incidence = mem::take(&mut self.node_incidences[node.idx()]);
 
         // It is important that we restore the edges in reverse order
-        for (_, (edge_idx, _)) in incidence.iter().rev() {
-            self.restore_edge(*edge_idx);
+        for (_, (edge, _)) in incidence.iter().rev() {
+            self.restore_edge(*edge);
         }
-        self.node_incidences[node_idx.idx()] = incidence;
+        self.node_incidences[node.idx()] = incidence;
     }
 
-    #[allow(dead_code)]
     pub fn export_as_ilp(&self, mut writer: impl Write) -> Result<()> {
         writeln!(writer, "Minimize")?;
         write!(writer, "  v{}", CompressedIlpName(self.nodes()[0]))?;

@@ -1,153 +1,69 @@
 use crate::{
     instance::{Instance, NodeIdx},
-    lower_bound,
+    lower_bound::{self, PackingBound},
     reductions::{self, ReductionResult},
+    report::{ReductionStats, Report, RootBounds, RuntimeStats, Settings},
     small_indices::IdxHashSet,
 };
-use anyhow::Result;
 use log::{debug, info, trace, warn};
-use serde::{Serialize, Serializer};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
-const ITER_LOG_GAP: u64 = 60;
-
-fn serialize_duration_as_seconds<S>(duration: &Duration, ser: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    ser.serialize_f64(duration.as_secs_f64())
-}
-
-#[allow(clippy::clippy::ptr_arg)]
-fn serialize_hitting_set_as_size<S>(hs: &Vec<NodeIdx>, ser: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    ser.serialize_u64(hs.len() as u64)
-}
-
-#[derive(Debug, Clone, Default, Serialize)]
-pub struct Solution {
-    /// Name of the input file for the instance
-    pub file_name: String,
-
-    /// Minimum hitting set
-    #[serde(rename = "hs_size", serialize_with = "serialize_hitting_set_as_size")]
-    pub minimum_hs: Vec<NodeIdx>,
-
-    /// Initial lower bound
-    pub lower_bound: usize,
-
-    /// Size of the greedily found initial hitting set
-    pub upper_bound: usize,
-
-    /// How often the branching algorithm has branched
-    pub branching_steps: usize,
-
-    /// Total time required to solve the instance
-    #[serde(serialize_with = "serialize_duration_as_seconds")]
-    pub runtime: Duration,
-
-    /// Total time spent running the greedy approximation
-    #[serde(serialize_with = "serialize_duration_as_seconds")]
-    pub runtime_greedy: Duration,
-
-    /// Total time spent running the solvable/unsolvable check
-    #[serde(serialize_with = "serialize_duration_as_seconds")]
-    pub runtime_solvability_check: Duration,
-
-    /// Total time spent calculating the lower bound packing
-    #[serde(serialize_with = "serialize_duration_as_seconds")]
-    pub runtime_packing: Duration,
-
-    /// Total time spent calculating the lower bound from the packing
-    #[serde(serialize_with = "serialize_duration_as_seconds")]
-    pub runtime_sum_lower_bound: Duration,
-
-    /// Total time spent finding edges of size 1
-    #[serde(serialize_with = "serialize_duration_as_seconds")]
-    pub runtime_size_1_edges: Duration,
-
-    /// Total time spent finding forced choices by extending the existing packing
-    #[serde(serialize_with = "serialize_duration_as_seconds")]
-    pub runtime_forced_choices_packing_extension: Duration,
-
-    /// Total time spent finding forced choices by recalculating the packing
-    #[serde(serialize_with = "serialize_duration_as_seconds")]
-    pub runtime_forced_choices_repacking: Duration,
-
-    /// Total time spent finding dominated nodes
-    #[serde(serialize_with = "serialize_duration_as_seconds")]
-    pub runtime_dominated_nodes: Duration,
-
-    /// Total time spent finding dominated edges
-    #[serde(serialize_with = "serialize_duration_as_seconds")]
-    pub runtime_dominated_edges: Duration,
-
-    /// Total time spent applying found reductions
-    #[serde(serialize_with = "serialize_duration_as_seconds")]
-    pub runtime_applying_reductions: Duration,
-}
+const ITERATION_LOG_INTERVAL_SECS: u64 = 60;
 
 #[derive(Debug, Clone)]
 struct State {
     partial_hs: Vec<NodeIdx>,
-    solution: Solution,
+    minimum_hs: Vec<NodeIdx>,
+    report: Report,
     last_log_time: Instant,
 }
 
-fn branch_on(node_idx: NodeIdx, instance: &mut Instance, state: &mut State) {
-    trace!("Branching on {}", node_idx);
-    instance.delete_node(node_idx);
-    state.solution.branching_steps += 1;
+fn branch_on(node: NodeIdx, instance: &mut Instance, state: &mut State) {
+    trace!("Branching on {}", node);
+    state.report.branching_steps += 1;
+    instance.delete_node(node);
 
-    // Randomize branching order
-    // let take_first: bool = state.rng.gen();
-    let take_first = true;
-    for &take in &[take_first, !take_first] {
-        if take {
-            instance.delete_incident_edges(node_idx);
-            state.partial_hs.push(node_idx);
-        }
+    instance.delete_incident_edges(node);
+    state.partial_hs.push(node);
+    solve_recursive(instance, state);
+    debug_assert_eq!(state.partial_hs.last().copied(), Some(node));
+    state.partial_hs.pop();
+    instance.restore_incident_edges(node);
 
-        solve_recursive(instance, state);
+    solve_recursive(instance, state);
 
-        if take {
-            debug_assert_eq!(state.partial_hs.last().copied(), Some(node_idx));
-            state.partial_hs.pop();
-            instance.restore_incident_edges(node_idx);
-        }
-    }
-
-    instance.restore_node(node_idx);
+    instance.restore_node(node);
 }
 
 fn solve_recursive(instance: &mut Instance, state: &mut State) {
     let now = Instant::now();
-    if (now - state.last_log_time).as_secs() >= ITER_LOG_GAP {
+    if (now - state.last_log_time).as_secs() >= ITERATION_LOG_INTERVAL_SECS {
         info!(
             "Running on {} for {} branching steps",
-            &state.solution.file_name, state.solution.branching_steps
+            &state.report.file_name, state.report.branching_steps
         );
         state.last_log_time = now;
     }
 
-    let (reduction_result, reduction) =
-        reductions::reduce(instance, &mut state.partial_hs, &mut state.solution);
+    let (reduction_result, reduction) = reductions::reduce(
+        instance,
+        &mut state.partial_hs,
+        &mut state.minimum_hs,
+        &mut state.report.runtimes,
+        &mut state.report.reductions,
+        &state.report.settings,
+    );
     match reduction_result {
         ReductionResult::Solved => {
-            if state.partial_hs.len() < state.solution.minimum_hs.len() {
+            if state.partial_hs.len() < state.minimum_hs.len() {
                 info!("Found HS of size {} by branching", state.partial_hs.len());
-                state.solution.minimum_hs.clear();
-                state
-                    .solution
-                    .minimum_hs
-                    .extend(state.partial_hs.iter().copied());
+                state.minimum_hs.clear();
+                state.minimum_hs.extend(state.partial_hs.iter().copied());
             } else {
                 warn!(
                     "Found HS is not smaller than best known ({} vs. {}), should have been pruned",
                     state.partial_hs.len(),
-                    state.solution.minimum_hs.len(),
+                    state.minimum_hs.len(),
                 );
             }
         }
@@ -157,7 +73,7 @@ fn solve_recursive(instance: &mut Instance, state: &mut State) {
                 .nodes()
                 .iter()
                 .copied()
-                .max_by_key(|&node_idx| instance.node_degree(node_idx))
+                .max_by_key(|&node| instance.node_degree(node))
                 .expect("Branching on an empty instance");
             branch_on(node, instance, state);
         }
@@ -166,48 +82,64 @@ fn solve_recursive(instance: &mut Instance, state: &mut State) {
     reduction.restore(instance, &mut state.partial_hs);
 }
 
-pub fn solve(mut instance: Instance, file_name: String) -> Result<Solution> {
-    let greedy_hs = reductions::greedy_approx(&instance);
-    let (packing, _) = lower_bound::pack_edges(&instance);
-    let lower_bound = lower_bound::calculate(&instance, &packing, 0);
-    info!("Lower bound: {}", lower_bound);
-    info!("Upper bound: {}", greedy_hs.len());
+pub fn solve(mut instance: Instance, file_name: String, settings: Settings) -> Report {
+    let num_nodes = instance.num_nodes_total();
+    let root_packing = PackingBound::new(&instance, &settings);
+    let root_bounds = RootBounds {
+        max_degree: lower_bound::calc_max_degree_bound(&instance).unwrap_or(num_nodes),
+        sum_degree: lower_bound::calc_sum_degree_bound(&instance),
+        efficiency: lower_bound::calc_efficiency_bound(&instance)
+            .0
+            .round()
+            .unwrap_or(num_nodes),
+        packing: root_packing.bound(),
+        sum_over_packing: root_packing.calc_sum_over_packing_bound(&instance),
+        greedy_upper: reductions::calc_greedy_approximation(&instance).len(),
+    };
+    let packing_from_scratch_limit = settings.packing_from_scratch_limit;
+    let mut report = Report {
+        file_name,
+        opt: instance.num_nodes_total(),
+        branching_steps: 0,
+        settings,
+        root_bounds,
+        runtimes: RuntimeStats::default(),
+        reductions: ReductionStats::default(),
+    };
+    report
+        .reductions
+        .costly_discard_packing_from_scratch_steps_per_run =
+        vec![0; packing_from_scratch_limit + 1];
 
     let time_start = Instant::now();
     let mut state = State {
         partial_hs: Vec::new(),
-        solution: Solution {
-            file_name,
-            minimum_hs: instance.nodes().to_vec(),
-            lower_bound,
-            upper_bound: greedy_hs.len(),
-            ..Solution::default()
-        },
-        last_log_time: Instant::now(),
+        minimum_hs: instance.nodes().to_vec(),
+        report,
+        last_log_time: time_start,
     };
     solve_recursive(&mut instance, &mut state);
-    state.solution.runtime = time_start.elapsed();
+    state.report.runtimes.total = time_start.elapsed();
+    state.report.opt = state.minimum_hs.len();
 
     info!(
         "Solving took {} branching steps in {:.2?}",
-        state.solution.branching_steps, state.solution.runtime
+        state.report.branching_steps, state.report.runtimes.total
     );
     debug!(
         "Final HS (size {}): {:?}",
-        state.solution.minimum_hs.len(),
-        &state.solution.minimum_hs
+        state.minimum_hs.len(),
+        &state.minimum_hs
     );
 
     info!("Validating found hitting set");
-    let hs_set: IdxHashSet<_> = state.solution.minimum_hs.iter().copied().collect();
+    let hs_set: IdxHashSet<_> = state.minimum_hs.iter().copied().collect();
     assert_eq!(instance.num_nodes_total(), instance.nodes().len());
     assert_eq!(instance.num_edges_total(), instance.edges().len());
-    for &edge_idx in instance.edges() {
-        let hit = instance
-            .edge(edge_idx)
-            .any(|node_idx| hs_set.contains(&node_idx));
-        assert!(hit, "edge {} not hit", edge_idx);
+    for &edge in instance.edges() {
+        let hit = instance.edge(edge).any(|node| hs_set.contains(&node));
+        assert!(hit, "edge {} not hit", edge);
     }
 
-    Ok(state.solution)
+    state.report
 }

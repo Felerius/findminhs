@@ -2,12 +2,11 @@
 #![allow(clippy::similar_names, clippy::cast_possible_truncation)]
 use crate::instance::Instance;
 use anyhow::{anyhow, Result};
-use csv::WriterBuilder;
 use log::info;
 use std::{
     ffi::OsStr,
-    fs::{File, OpenOptions},
-    io::{BufReader, BufWriter},
+    fs::File,
+    io::{self, BufReader, BufWriter},
     path::PathBuf,
 };
 use structopt::StructOpt;
@@ -16,62 +15,84 @@ mod data_structures;
 mod instance;
 mod lower_bound;
 mod reductions;
+mod report;
 mod small_indices;
 mod solve;
 
-/// Minimum hitting set solver
 #[derive(Debug, StructOpt)]
-struct CliOpts {
-    /// Input hypergraph file to process
-    #[structopt(parse(from_os_str))]
-    input_file: PathBuf,
+enum CliOpts {
+    /// Solve a given instance using the solver
+    Solve(SolveOpts),
 
-    /// CSV file to append results to
-    #[structopt(short, long, parse(from_os_str))]
-    csv: Option<PathBuf>,
-
-    /// If given, save the input hypergraph as an ILP to the given file and quit immediately
-    #[structopt(long, parse(from_os_str))]
-    ilp: Option<PathBuf>,
+    /// Convert a given instance into an equivalent ILP
+    Ilp(IlpOpts),
 }
 
-fn main() -> Result<()> {
-    env_logger::from_env(env_logger::Env::new().filter_or("FINDMINHS_LOG", "info"))
-        .format_timestamp_millis()
-        .init();
+#[derive(Debug, StructOpt)]
+struct IlpOpts {
+    /// Input hypergraph file to convert
+    #[structopt(parse(from_os_str))]
+    hypergraph: PathBuf,
+}
 
-    let opts = CliOpts::from_args();
+#[derive(Debug, StructOpt)]
+struct SolveOpts {
+    /// Hypergraph to solve
+    #[structopt(parse(from_os_str))]
+    hypergraph: PathBuf,
 
+    /// File containing solver settings
+    #[structopt(parse(from_os_str))]
+    settings: PathBuf,
+
+    /// File to write an optional, JSON-formatted report into
+    #[structopt(short, long, parse(from_os_str))]
+    report: Option<PathBuf>,
+}
+
+fn solve(opts: SolveOpts) -> Result<()> {
     let file_name = opts
-        .input_file
+        .hypergraph
         .file_name()
         .and_then(OsStr::to_str)
         .ok_or_else(|| anyhow!("File name can't be extracted"))?
         .to_string();
-    let file = BufReader::new(File::open(&opts.input_file)?);
-    let instance = Instance::load(file)?;
+    let instance = {
+        let reader = BufReader::new(File::open(&opts.hypergraph)?);
+        Instance::load(reader)?
+    };
+    let settings = {
+        let reader = BufReader::new(File::open(&opts.settings)?);
+        serde_json::from_reader(reader)?
+    };
 
-    if let Some(ilp_path) = opts.ilp {
-        let writer = BufWriter::new(File::create(ilp_path)?);
-        instance.export_as_ilp(writer)?;
-        return Ok(());
-    }
+    info!("Solving {:?}", &opts.hypergraph);
+    let report = solve::solve(instance, file_name, settings);
+    info!("Smallest HS has size {}", report.opt);
 
-    info!("Solving {:?}", &opts.input_file);
-    let solution = solve::solve(instance, file_name)?;
-    info!("Smallest HS has size {}", solution.minimum_hs.len());
-
-    if let Some(csv_file) = opts.csv {
-        let file = OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(&csv_file)?;
-        let write_header = file.metadata()?.len() == 0;
-        let mut writer = WriterBuilder::new()
-            .has_headers(write_header)
-            .from_writer(file);
-        writer.serialize(solution)?;
+    if let Some(report_file) = opts.report {
+        let writer = BufWriter::new(File::create(&report_file)?);
+        serde_json::to_writer(writer, &report)?;
     }
 
     Ok(())
+}
+
+fn convert_to_ilp(opts: IlpOpts) -> Result<()> {
+    let reader = BufReader::new(File::open(&opts.hypergraph)?);
+    let instance = Instance::load(reader)?;
+    let stdout = io::stdout();
+    instance.export_as_ilp(stdout.lock())
+}
+
+fn main() -> Result<()> {
+    env_logger::Builder::from_env(env_logger::Env::new().filter_or("FINDMINHS_LOG", "info"))
+        .format_timestamp_millis()
+        .init();
+
+    let opts = CliOpts::from_args();
+    match opts {
+        CliOpts::Solve(solve_opts) => solve(solve_opts),
+        CliOpts::Ilp(ilp_opts) => convert_to_ilp(ilp_opts),
+    }
 }
