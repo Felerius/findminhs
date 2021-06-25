@@ -164,7 +164,11 @@ fn find_costly_discard_using_packing_from_scratch(
         .find_map(|(idx, node)| {
             instance.delete_node(node);
             let packing_bound = PackingBound::new(instance, settings);
-            let new_lower_bound = packing_bound.calc_sum_over_packing_bound(instance);
+            let new_lower_bound = if settings.enable_sum_over_packing_bound {
+                packing_bound.calc_sum_over_packing_bound(instance)
+            } else {
+                packing_bound.bound()
+            };
             instance.restore_node(node);
 
             if new_lower_bound >= lower_bound_breakpoint {
@@ -361,7 +365,7 @@ pub fn reduce(
             || find_forced_nodes(instance),
         );
 
-        if reduced_items.len() == unchanged_len {
+        if reduced_items.len() == unchanged_len && report.settings.enable_efficiency_bound {
             // Do not time this step as all costly parts are integrated into the
             // calculation of the efficiency bound above. This steps just checks
             // the already calculated discard bounds against the breakpoint
@@ -381,7 +385,7 @@ pub fn reduce(
             );
         }
 
-        if reduced_items.len() == unchanged_len {
+        if reduced_items.len() == unchanged_len && report.settings.enable_packing_bound {
             run_reduction(
                 &mut reduced_items,
                 &mut report.runtimes.costly_discard_packing_update,
