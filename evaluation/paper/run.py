@@ -79,17 +79,25 @@ def main() -> None:
                                  Settings(packing_from_scratch_limit=i),
                                  instances)
 
-    # Only use a single bound
-    bounds = [
-        'max-degree', 'sum-degree', 'efficiency', 'packing', 'sum-over-packing'
+    # Different experiments using only a single bound
+    bound_experiment_specs = [
+        ('max_degree', ['enable_max_degree_bound']),
+        ('sum_degree', ['enable_sum_degree_bound']),
+        ('efficiency', ['enable_efficiency_bound']),
+        ('packing', ['enable_packing_bound']),
+        ('packing-local-search', ['enable_packing_bound', 'enable_local_search']),
+        ('sum-over-packing', ['enable_packing_bound', 'enable_sum_over_packing_bound']),
+        ('sum-over-packing-local-search', ['enable_packing_bound', 'enable_sum_over_packing_bound', 'enable_local_search']),
     ]
-    for name in bounds:
-        settings = Settings(enable_max_degree_bound=False,
-                            enable_sum_degree_bound=False,
-                            enable_efficiency_bound=False,
-                            enable_packing_bound=False,
-                            enable_sum_over_packing_bound=False)
-        setattr(settings, f'enable_{name.replace("-", "_")}_bound', True)
+    no_bounds_settings = Settings(enable_max_degree_bound=False,
+                                  enable_sum_degree_bound=False,
+                                  enable_efficiency_bound=False,
+                                  enable_packing_bound=False,
+                                  enable_sum_over_packing_bound=False)
+    for (name, enabled_settings) in bound_experiment_specs:
+        settings = dataclasses.replace(
+            no_bounds_settings,
+            **{setting: True for setting in enabled_settings})
         add_findminhs_experiment(f'{name}-only', settings, instances)
 
     # Different greedy modes
