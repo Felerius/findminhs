@@ -74,7 +74,7 @@ def main() -> None:
     add_findminhs_experiment('default', Settings(), instances)
 
     # Different packing from scratch limits
-    for i in [1, 5, 7, 9, 11, 13, 15, 17, 19]:
+    for i in [0, 1, 5, 7, 9, 11, 13, 15, 17, 19]:
         add_findminhs_experiment(f'from-scratch-{i}',
                                  Settings(packing_from_scratch_limit=i),
                                  instances)
