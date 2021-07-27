@@ -101,7 +101,7 @@ def main() -> None:
         add_findminhs_experiment(f'{name}-only', settings, instances)
 
     # Different greedy modes
-    greedy_modes = ['AlwaysBeforeBounds', 'AlwaysBeforeExpensiveReductions']
+    greedy_modes = ['Never', 'AlwaysBeforeBounds', 'AlwaysBeforeExpensiveReductions']
     for greedy_mode in greedy_modes:
         hyphenated_mode = re.sub('([A-Z])', r'-\1', greedy_mode)[1:].lower()
         add_findminhs_experiment(f'greedy-{hyphenated_mode}',

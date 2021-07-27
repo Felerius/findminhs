@@ -94,6 +94,7 @@ pub struct RootBounds {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GreedyMode {
+    Never,
     Once,
     AlwaysBeforeBounds,
     AlwaysBeforeExpensiveReductions,
