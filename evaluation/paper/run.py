@@ -12,6 +12,10 @@ INSTANCE_DIR = SCRIPT_DIR / 'instances'
 RESULTS_DIR = SCRIPT_DIR / 'results'
 LOGS_DIR = SCRIPT_DIR / 'logs'
 SETTINGS_DIR = SCRIPT_DIR / 'settings'
+ILP_DIR = SCRIPT_DIR / 'ilps'
+GUROBI_LOGS_DIR = SCRIPT_DIR / 'gurobi-logs'
+GUROBI_SOLUTIONS_DIR = SCRIPT_DIR / 'gurobi-solutions'
+GUROBI_EXE = 'gurobi_cl'
 
 TIMEOUT = '1h'
 
@@ -81,13 +85,18 @@ def main() -> None:
 
     # Different experiments using only a single bound
     bound_experiment_specs = [
-        ('max_degree', ['enable_max_degree_bound']),
-        ('sum_degree', ['enable_sum_degree_bound']),
+        ('max-degree', ['enable_max_degree_bound']),
+        ('sum-degree', ['enable_sum_degree_bound']),
         ('efficiency', ['enable_efficiency_bound']),
         ('packing', ['enable_packing_bound']),
-        ('packing-local-search', ['enable_packing_bound', 'enable_local_search']),
-        ('sum-over-packing', ['enable_packing_bound', 'enable_sum_over_packing_bound']),
-        ('sum-over-packing-local-search', ['enable_packing_bound', 'enable_sum_over_packing_bound', 'enable_local_search']),
+        ('packing-local-search',
+         ['enable_packing_bound', 'enable_local_search']),
+        ('sum-over-packing',
+         ['enable_packing_bound', 'enable_sum_over_packing_bound']),
+        ('sum-over-packing-local-search', [
+            'enable_packing_bound', 'enable_sum_over_packing_bound',
+            'enable_local_search'
+        ]),
     ]
     no_bounds_settings = Settings(enable_max_degree_bound=False,
                                   enable_sum_degree_bound=False,
@@ -97,15 +106,43 @@ def main() -> None:
     for (name, enabled_settings) in bound_experiment_specs:
         settings = dataclasses.replace(
             no_bounds_settings,
-            **{setting: True for setting in enabled_settings})
+            **{setting: True
+               for setting in enabled_settings})
         add_findminhs_experiment(f'{name}-only', settings, instances)
 
     # Different greedy modes
-    greedy_modes = ['Never', 'AlwaysBeforeBounds', 'AlwaysBeforeExpensiveReductions']
+    greedy_modes = [
+        'Never', 'AlwaysBeforeBounds', 'AlwaysBeforeExpensiveReductions'
+    ]
     for greedy_mode in greedy_modes:
         hyphenated_mode = re.sub('([A-Z])', r'-\1', greedy_mode)[1:].lower()
         add_findminhs_experiment(f'greedy-{hyphenated_mode}',
                                  Settings(greedy_mode=greedy_mode), instances)
+
+    # Generate ILP files
+    ILP_DIR.mkdir(exist_ok=True, parents=True)
+    run.add('generate-ilps',
+            f'{SCRIPT_DIR}/findminhs ilp {INSTANCE_DIR}/[[name]].dat',
+            {'name': instances},
+            stdout_file=f'{ILP_DIR}/[[name]].ilp',
+            creates_file=f'{ILP_DIR}/[[name]].ilp')
+
+    # Solve with Gurobi
+    GUROBI_LOGS_DIR.mkdir(exist_ok=True, parents=True)
+    GUROBI_SOLUTIONS_DIR.mkdir(exist_ok=True, parents=True)
+    gurobi_cmd = f'''
+        timeout {TIMEOUT} {GUROBI_EXE} Threads=1 NodefileStart=1.0
+        LogFile={GUROBI_LOGS_DIR}/[[name]].log
+        ResultFile={GUROBI_SOLUTIONS_DIR}/[[name]].sol
+        {ILP_DIR}/[[name]].ilp
+    '''.replace('\n', ' ')
+    run.add(
+        'gurobi',
+        gurobi_cmd,
+        {'name': instances},
+        creates_file=f'{GUROBI_SOLUTIONS_DIR}/[[name]].sol',
+        allowed_return_codes=[0, 124],
+    )
 
     run.use_cores(16)
     run.run()
