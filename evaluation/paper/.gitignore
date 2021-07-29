@@ -1,4 +1,5 @@
 /logs/
+/gurobi-logs/
 /results/
 /settings/
 /findminhs
