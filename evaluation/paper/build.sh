@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-RUST_VERSION=1.52.1
+RUST_VERSION=1.53
 RUST_TARGET=x86_64-unknown-linux-gnu
 
 SCRIPT_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")"
