@@ -17,7 +17,7 @@ GUROBI_LOGS_DIR = SCRIPT_DIR / 'gurobi-logs'
 GUROBI_SOLUTIONS_DIR = SCRIPT_DIR / 'gurobi-solutions'
 GUROBI_EXE = 'gurobi_cl'
 
-TIMEOUT = '1h'
+TIMEOUT = '24h'
 
 
 @dataclasses.dataclass
@@ -47,41 +47,31 @@ def find_instances() -> List[str]:
     return instances
 
 
-def add_findminhs_experiment(name: str, settings: Settings,
-                             instances: List[str]) -> None:
-    results_dir = RESULTS_DIR / name
-    logs_dir = LOGS_DIR / name
-    settings_file = SETTINGS_DIR / (name + '.json')
-    for directory in (results_dir, logs_dir, SETTINGS_DIR):
-        directory.mkdir(exist_ok=True, parents=True)
-    with settings_file.open('w') as f:
-        json.dump(dataclasses.asdict(settings), f)
-    command = (f'timeout {TIMEOUT} {SCRIPT_DIR}/findminhs solve '
-               f'{INSTANCE_DIR}/[[name]].dat '
-               f'{settings_file} '
-               f'--report {results_dir}/[[name]].json 2>&1')
-    run.add(
-        name,
-        command,
-        {'name': instances},
-        stdout_file=f'{logs_dir}/[[name]].log',
-        creates_file=f'{results_dir}/[[name]].json',
-        allowed_return_codes=[0, 124],
-    )
-
-
 def main() -> None:
     instances = [f.stem for f in INSTANCE_DIR.glob('*.dat')]
+    experiments = []
+
+    def add_experiment(name: str, settings: Settings) -> None:
+        results_dir = RESULTS_DIR / name
+        logs_dir = LOGS_DIR / name
+        settings_file = SETTINGS_DIR / (name + '.json')
+        for directory in (results_dir, logs_dir, SETTINGS_DIR):
+            directory.mkdir(exist_ok=True, parents=True)
+        with settings_file.open('w') as f:
+            json.dump(dataclasses.asdict(settings), f)
+        experiments.append(name)
+
     run.group('all')
 
     # All default settings
-    add_findminhs_experiment('default', Settings(), instances)
+    add_experiment('default', Settings())
 
     # Different packing from scratch limits
     for i in [0, 1, 5, 7, 9, 11, 13, 15, 17, 19]:
-        add_findminhs_experiment(f'from-scratch-{i}',
-                                 Settings(packing_from_scratch_limit=i),
-                                 instances)
+        add_experiment(
+            f'from-scratch-{i}',
+            Settings(packing_from_scratch_limit=i),
+        )
 
     # Different experiments using only a single bound
     bound_experiment_specs = [
@@ -108,7 +98,7 @@ def main() -> None:
             no_bounds_settings,
             **{setting: True
                for setting in enabled_settings})
-        add_findminhs_experiment(f'{name}-only', settings, instances)
+        add_experiment(f'{name}-only', settings)
 
     # Different greedy modes
     greedy_modes = [
@@ -116,8 +106,28 @@ def main() -> None:
     ]
     for greedy_mode in greedy_modes:
         hyphenated_mode = re.sub('([A-Z])', r'-\1', greedy_mode)[1:].lower()
-        add_findminhs_experiment(f'greedy-{hyphenated_mode}',
-                                 Settings(greedy_mode=greedy_mode), instances)
+        add_experiment(f'greedy-{hyphenated_mode}',
+                       Settings(greedy_mode=greedy_mode))
+
+    # Generate combined experiment for all findminhs runs. This avoids
+    # blocking on long-running instances of a single experiment, which
+    # would leave lots of cores unused.
+    findminhs_command = (
+        f'timeout {TIMEOUT} {SCRIPT_DIR}/findminhs solve '
+        f'{INSTANCE_DIR}/[[name]].dat '
+        f'{SETTINGS_DIR}/[[experiment]].json '
+        f'--report {RESULTS_DIR}/[[experiment]]/[[name]].json 2>&1')
+    run.add(
+        'findminhs',
+        findminhs_command,
+        {
+            'name': instances,
+            'experiment': experiments
+        },
+        stdout_file=f'{LOGS_DIR}/[[experiment]]/[[name]].log',
+        creates_file=f'{RESULTS_DIR}/[[experiment]]/[[name]].json',
+        allowed_return_codes=[0, 124],
+    )
 
     # Generate ILP files
     ILP_DIR.mkdir(exist_ok=True, parents=True)
@@ -131,7 +141,7 @@ def main() -> None:
     GUROBI_LOGS_DIR.mkdir(exist_ok=True, parents=True)
     GUROBI_SOLUTIONS_DIR.mkdir(exist_ok=True, parents=True)
     gurobi_cmd = f'''
-        timeout {TIMEOUT} {GUROBI_EXE} Threads=1 NodefileStart=1.0
+        timeout {TIMEOUT} {GUROBI_EXE} Threads=1
         LogFile={GUROBI_LOGS_DIR}/[[name]].log
         ResultFile={GUROBI_SOLUTIONS_DIR}/[[name]].sol
         {ILP_DIR}/[[name]].ilp
@@ -144,7 +154,7 @@ def main() -> None:
         allowed_return_codes=[0, 124],
     )
 
-    run.use_cores(16)
+    run.use_cores(124)
     run.run()
 
 
