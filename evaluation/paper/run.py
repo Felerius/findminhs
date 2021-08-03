@@ -13,8 +13,12 @@ RESULTS_DIR = SCRIPT_DIR / 'results'
 LOGS_DIR = SCRIPT_DIR / 'logs'
 SETTINGS_DIR = SCRIPT_DIR / 'settings'
 ILP_DIR = SCRIPT_DIR / 'ilps'
+ILP_REDUCED_DIR = SCRIPT_DIR / 'ilps-reduced'
+ILP_REDUCTION_REPORT_DIR = SCRIPT_DIR / 'reduction-logs'
 GUROBI_LOGS_DIR = SCRIPT_DIR / 'gurobi-logs'
+GUROBI_REDUCED_LOGS_DIR = SCRIPT_DIR / 'gurobi-reduced-logs'
 GUROBI_SOLUTIONS_DIR = SCRIPT_DIR / 'gurobi-solutions'
+GUROBI_REDUCED_SOLUTIONS_DIR = SCRIPT_DIR / 'gurobi-reduced-solutions'
 GUROBI_EXE = 'gurobi_cl'
 
 TIMEOUT = '24h'
@@ -137,22 +141,40 @@ def main() -> None:
             stdout_file=f'{ILP_DIR}/[[name]].ilp',
             creates_file=f'{ILP_DIR}/[[name]].ilp')
 
-    # Solve with Gurobi
-    GUROBI_LOGS_DIR.mkdir(exist_ok=True, parents=True)
-    GUROBI_SOLUTIONS_DIR.mkdir(exist_ok=True, parents=True)
-    gurobi_cmd = f'''
-        timeout {TIMEOUT} {GUROBI_EXE} Threads=1
-        LogFile={GUROBI_LOGS_DIR}/[[name]].log
-        ResultFile={GUROBI_SOLUTIONS_DIR}/[[name]].sol
-        {ILP_DIR}/[[name]].ilp
+    # Generate pre-reduced ILP files
+    ILP_REDUCED_DIR.mkdir(exist_ok=True, parents=True)
+    ILP_REDUCTION_REPORT_DIR.mkdir(exist_ok=True, parents=True)
+    reduced_ilp_cmd = f'''
+        {SCRIPT_DIR}/findminhs ilp --reduced --report
+        {ILP_REDUCTION_REPORT_DIR}/[[name]].json {INSTANCE_DIR}/[[name]].dat
     '''.replace('\n', ' ')
-    run.add(
-        'gurobi',
-        gurobi_cmd,
-        {'name': instances},
-        creates_file=f'{GUROBI_SOLUTIONS_DIR}/[[name]].sol',
-        allowed_return_codes=[0, 124],
-    )
+    run.add('generate-reduced-ilps',
+            reduced_ilp_cmd, {'name': instances},
+            stdout_file=f'{ILP_REDUCED_DIR}/[[name]].ilp',
+            creates_file=f'{ILP_REDUCED_DIR}/[[name]].ilp')
+
+    # Solve with Gurobi
+    for reduced in (False, True):
+        logs_dir = GUROBI_REDUCED_LOGS_DIR if reduced else GUROBI_LOGS_DIR
+        solutions_dir = GUROBI_REDUCED_SOLUTIONS_DIR if reduced else GUROBI_SOLUTIONS_DIR
+        ilp_dir = ILP_REDUCED_DIR if reduced else ILP_DIR
+
+        logs_dir.mkdir(exist_ok=True, parents=True)
+        solutions_dir.mkdir(exist_ok=True, parents=True)
+
+        gurobi_cmd = f'''
+            timeout {TIMEOUT} {GUROBI_EXE} Threads=1
+            LogFile={logs_dir}/[[name]].log
+            ResultFile={solutions_dir}/[[name]].sol
+            {ilp_dir}/[[name]].ilp
+        '''.replace('\n', ' ')
+        run.add(
+            'gurobi-reduced' if reduced else 'gurobi',
+            gurobi_cmd,
+            {'name': instances},
+            creates_file=f'{solutions_dir}/[[name]].sol',
+            allowed_return_codes=[0, 124],
+        )
 
     run.use_cores(124)
     run.run()

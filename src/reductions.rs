@@ -477,3 +477,33 @@ pub fn reduce(
 
     (result, Reduction(reduced_items))
 }
+
+pub fn reduce_for_ilp(instance: &mut Instance) -> (usize, usize) {
+    let mut reduced = Vec::new();
+    let mut dummy_partial_hs = Vec::new();
+    let mut reduced_nodes = 0;
+    let mut reduced_edges = 0;
+    loop {
+        let mut changed = false;
+
+        reduced.extend(find_dominated_nodes(instance));
+        reduced_nodes += reduced.len();
+        changed |= !reduced.is_empty();
+        for item in reduced.drain(..) {
+            item.apply(instance, &mut dummy_partial_hs);
+        }
+
+        reduced.extend(find_dominated_edges(instance));
+        reduced_edges += reduced.len();
+        changed |= !reduced.is_empty();
+        for item in reduced.drain(..) {
+            item.apply(instance, &mut dummy_partial_hs);
+        }
+
+        if !changed {
+            break;
+        }
+    }
+
+    (reduced_nodes, reduced_edges)
+}

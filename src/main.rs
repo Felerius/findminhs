@@ -1,6 +1,6 @@
 #![warn(clippy::all, clippy::pedantic)]
 #![allow(clippy::similar_names, clippy::cast_possible_truncation)]
-use crate::instance::Instance;
+use crate::{instance::Instance, report::IlpReductionReport};
 use anyhow::{anyhow, Result};
 use log::info;
 use std::{
@@ -8,6 +8,7 @@ use std::{
     fs::File,
     io::{self, BufReader, BufWriter},
     path::PathBuf,
+    time::Instant,
 };
 use structopt::StructOpt;
 
@@ -33,6 +34,14 @@ struct IlpOpts {
     /// Input hypergraph file to convert
     #[structopt(parse(from_os_str))]
     hypergraph: PathBuf,
+
+    /// Reduce the hypergraph first by applying vertex and edge domination rules
+    #[structopt(long)]
+    reduced: bool,
+
+    /// Write a json report about the applied reductions to this file
+    #[structopt(long, parse(from_os_str), requires("reduced"))]
+    report: Option<PathBuf>,
 }
 
 #[derive(Debug, StructOpt)]
@@ -80,7 +89,22 @@ fn solve(opts: SolveOpts) -> Result<()> {
 
 fn convert_to_ilp(opts: IlpOpts) -> Result<()> {
     let reader = BufReader::new(File::open(&opts.hypergraph)?);
-    let instance = Instance::load(reader)?;
+    let mut instance = Instance::load(reader)?;
+
+    if opts.reduced {
+        let time_before = Instant::now();
+        let (reduced_vertices, reduced_edges) = reductions::reduce_for_ilp(&mut instance);
+        if let Some(report_file) = opts.report {
+            let report = IlpReductionReport {
+                runtime: time_before.elapsed(),
+                reduced_vertices,
+                reduced_edges,
+            };
+            let log_writer = BufWriter::new(File::create(&report_file)?);
+            serde_json::to_writer(log_writer, &report)?;
+        }
+    }
+
     let stdout = io::stdout();
     instance.export_as_ilp(stdout.lock())
 }

@@ -138,3 +138,12 @@ pub struct Report {
     pub runtimes: RuntimeStats,
     pub reductions: ReductionStats,
 }
+
+#[derive(Debug, Clone, Serialize)]
+pub struct IlpReductionReport {
+    #[serde(serialize_with = "serialize_duration_as_seconds")]
+    pub runtime: Duration,
+
+    pub reduced_vertices: usize,
+    pub reduced_edges: usize,
+}
