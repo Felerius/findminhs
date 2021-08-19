@@ -1,32 +1,30 @@
-# Activity-Based Minimum Hitting Set Solver
+# An Efficient Branch-and-Bound Solver for Hitting Set
 
-Implementation of the Minimum Hitting Set solver described in my master thesis.
-It uses a branching heuristic based on the popular VSIDS heuristic used in SAT solvers, introduced by Moskewicz et al. [[Mos+01]](https://dl.acm.org/doi/abs/10.1145/378239.379017).
-Also included are the results used in the evaluation part of the thesis, as well as the code used to evaluate them.
+Implementation of a Minimum Hitting Set solver described in a soon to be released paper.
+Also included is the code used for the evaluation section of the paper.
 
 ## Building
 
-The solver is implemented using the Rust programming language.
-It is structured as a Cargo project, so you can use the Cargo project manager included with Rust to build it.
-All required dependencies will be downloaded automatically.
-For example, `cargo build` would build a debug version of the solver.
-
-The Cargo project uses several features to control which version of the activity heuristic is used (including disabling it).
-To replicate the settings used in the thesis, pass `--features=branching-random` to Cargo to build with uniform-random branching, or `--features=branching-activity` for the `abs-incl` heuristic.
+The solver is implemented in the [Rust programming language](https://rust-lang.org).
+It is structured as a project using the Cargo project manager included with Rust.
+All dependencies are listed in the project format and will be downloaded automatically.
+To get started, `cargo build --release` creates an optimized build in the `target/release` directory.
 
 ## Usage
 
-Pass the `--help` flag to the solver to get a list of options (for example with `cargo run -- --help`).
-To collect results, you can pass a path to the CSV file to the solver using `-c`.
-Once the solver finishes, it appends an entry to this file (or creates it, if it doesn't exist).
+To run the solver use `./findminhs solve <hypergraph-file> <settings-file>`.
+The formats for both inputs are described in detail below.
+Pass `-r <report-file>` to have the solver generate a json formatted report containing statistics about the solving process.
+For all further details, refer to the included help messages in the command-line interface.
 
-## Hypergraph Format
+### Hypergraph format
 
-The solver expects hypergraphs in a text based format.
-The first line of file should contain two integers: first the number of vertices, then the hyperedges.
-The following lines each represent a hyperedge, containing firstly the number of vertices in the edge, and then the zero-based vertex identifiers.
+The solver expects hypergraphs in a text-based format.
+The first line should contain two non-negative integers: the number of vertices and the number of hyperedges.
+Each of the following lines represents a hyperedge.
+They should first contain the number of vertices in the edge, followed by the zero-based indices of the vertices.
 
-The following file would represent a hypergraph of three vertices and and the two hyperedges {0, 1} and {1, 2}:
+The following file represents a hypergraph of three vertices and two hyperedges {0, 1} and {1, 2}:
 
 ```text
 3 2
@@ -34,9 +32,26 @@ The following file would represent a hypergraph of three vertices and and the tw
 2 1 2
 ```
 
+### Settings format
+
+The settings file is a json file in the same format as this example:
+
+```json
+{
+    "enable_local_search": false,
+    "enable_max_degree_bound": true,
+    "enable_sum_degree_bound": false,
+    "enable_efficiency_bound": true,
+    "enable_packing_bound": true,
+    "enable_sum_over_packing_bound": true,
+    "packing_from_scratch_limit": 3,
+    "greedy_mode": "Once"
+}
+```
+
+The possible values for `greedy_mode` are: `Never`, `Once`, `AlwaysBeforeBounds`, and `AlwayseBeforeExpensiveReductions`.
+
 ## Evaluation
 
-The `evaluation` directory contains the Jupyter notebook used to evaluate the experimental results for my thesis.
-The `evaluation/results` directory contains the results of the experimental runs, both in form of the CSV file produced by the solver as well as logs of its output.
-The CSV files include the random number generator seed used for each run.
-Note that the experiments were run in parallel, so the logs contain interleaved output of parallel runs.
+The code for the evaluation is in the [`evaluation/paper`](evaluation/paper) directory.
+Refer to its readme for details.
