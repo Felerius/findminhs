@@ -11,7 +11,7 @@ Make sure you have Rust 1.53 as well as the standard library and a linker for th
 
 ## Running the Experiments
 
-An archive containing all the hitting set instances used can be found in the Github release.
+An archive containing all the hitting set instances used can be found in the [Github release](https://github.com/Felerius/findminhs/releases/tag/v2-paper).
 Extract it into an `instances` directory in this folder, then use `python3 run.py all` to run all experiments.
 This requires Python 3.6 or later as well as the dependencies listed in the `Pipfile` in the root of this repository.
 The latter can be installed using [`pipenv`](https://pipenv.pypa.io/en/latest/).
