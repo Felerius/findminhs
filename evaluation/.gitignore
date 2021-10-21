@@ -1,0 +1,9 @@
+/logs/
+/gurobi-logs/
+/gurobi-reduced-logs/
+/reduction-logs/
+/results/
+/settings/
+/findminhs
+/instance-sizes.json
+/plots/

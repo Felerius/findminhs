@@ -1,12 +1,13 @@
 # An Efficient Branch-and-Bound Solver for Hitting Set
 
-Implementation of a Minimum Hitting Set solver described in a soon to be released paper.
+Implementation of a Minimum Hitting Set solver described in the An Efficient Branch-and-Bound Solver for Hitting Set research paper.
 Also included is the code used for the evaluation section of the paper.
+
+*Note*: In the Github releases you can find the earlier version of this solver described in my master thesis.
 
 ## Building
 
-The solver is implemented in the [Rust programming language](https://rust-lang.org).
-It is structured as a project using the Cargo project manager included with Rust.
+The solver is implemented in the [Rust programming language](https://rust-lang.org) using the Cargo project manager included with it.
 All dependencies are listed in the project format and will be downloaded automatically.
 To get started, `cargo build --release` creates an optimized build in the `target/release` directory.
 
@@ -19,10 +20,8 @@ For all further details, refer to the included help messages in the command-line
 
 ### Hypergraph format
 
-The solver expects hypergraphs in a text-based format.
-The first line should contain two non-negative integers: the number of vertices and the number of hyperedges.
-Each of the following lines represents a hyperedge.
-They should first contain the number of vertices in the edge, followed by the zero-based indices of the vertices.
+The solver expects hypergraphs in the following text-based format: an initial line containing the number of vertices and hyperedges followed by one line per hyperedge.
+Each hyperedge line should contain the number of vertices in it followed by the zero-based indices of the vertices.
 
 The following file represents a hypergraph of three vertices and two hyperedges {0, 1} and {1, 2}:
 
@@ -49,9 +48,9 @@ The settings file is a json file in the same format as this example:
 }
 ```
 
-The possible values for `greedy_mode` are: `Never`, `Once`, `AlwaysBeforeBounds`, and `AlwayseBeforeExpensiveReductions`.
+The possible values for `greedy_mode` are: `Never`, `Once`, `AlwaysBeforeBounds`, and `AlwaysBeforeExpensiveReductions`.
 
 ## Evaluation
 
-The code for the evaluation is in the [`evaluation/paper`](evaluation/paper) directory.
+The code for the evaluation is in the [`evaluation`](evaluation) directory.
 Refer to its readme for details.
