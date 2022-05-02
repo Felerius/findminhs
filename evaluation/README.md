@@ -1,6 +1,6 @@
 # Evaluation
 
-This directory contains the code for the evaluation section of the paper.
+This directory contains the code for the evaluation section of the [paper](https://epubs.siam.org/doi/10.1137/1.9781611977042.17).
 Detailed below are the steps to reproduce our results.
 
 ## Building

@@ -1,6 +1,6 @@
 # An Efficient Branch-and-Bound Solver for Hitting Set
 
-Implementation of a Minimum Hitting Set solver described in the An Efficient Branch-and-Bound Solver for Hitting Set research paper.
+Implementation of a Minimum Hitting Set solver described in the [An Efficient Branch-and-Bound Solver for Hitting Set research paper](https://epubs.siam.org/doi/10.1137/1.9781611977042.17).
 Also included is the code used for the evaluation section of the paper.
 
 *Note*: In the Github releases you can find the earlier version of this solver described in my master thesis.
