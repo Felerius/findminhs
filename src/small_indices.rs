@@ -1,8 +1,7 @@
-use fxhash::FxHasher32;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::{
-    collections::{HashMap, HashSet},
     fmt::{Debug, Display},
-    hash::{BuildHasherDefault, Hash},
+    hash::Hash,
 };
 
 pub trait SmallIdx:
@@ -94,10 +93,8 @@ macro_rules! create_idx_struct {
     };
 }
 
-type Fx32HashBuilder = BuildHasherDefault<FxHasher32>;
-
 /// Hash map with optimized hash function for small indices.
-pub type IdxHashMap<I, V> = HashMap<I, V, Fx32HashBuilder>;
+pub type IdxHashMap<I, V> = FxHashMap<I, V>;
 
 /// Hash set with optimized hash function for small indices.
-pub type IdxHashSet<I> = HashSet<I, Fx32HashBuilder>;
+pub type IdxHashSet<I> = FxHashSet<I>;
