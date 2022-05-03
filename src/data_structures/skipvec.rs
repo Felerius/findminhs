@@ -4,6 +4,7 @@ use std::{
     fmt::{self, Debug, Formatter},
     iter::{self, FromIterator, FusedIterator},
     ops::{Index, IndexMut},
+    ptr,
 };
 
 /// Fixed-size vector that can delete and restore elements in O(1).
@@ -386,7 +387,7 @@ impl<'a, T> Iterator for IterMut<'a, T> {
         };
         self.rem_len -= 1;
         // Unsafe reborrow to get 'a lifetime
-        Some((index, unsafe { &mut *(&mut entry.value as *mut T) }))
+        Some((index, unsafe { &mut *ptr::addr_of_mut!(entry.value) }))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -408,7 +409,7 @@ impl<'a, T> DoubleEndedIterator for IterMut<'a, T> {
         };
         self.rem_len -= 1;
         // Unsafe reborrow to get 'a lifetime
-        Some((index, unsafe { &mut *(&mut entry.value as *mut T) }))
+        Some((index, unsafe { &mut *ptr::addr_of_mut!(entry.value) }))
     }
 }
 

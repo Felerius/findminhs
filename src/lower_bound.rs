@@ -58,6 +58,7 @@ impl EfficiencyBound {
         };
 
         if rounded.is_finite() {
+            #[allow(clippy::cast_sign_loss)]
             Some(rounded as usize)
         } else {
             None
@@ -65,6 +66,7 @@ impl EfficiencyBound {
     }
 }
 
+#[allow(clippy::cast_precision_loss)]
 pub fn calc_efficiency_bound(instance: &Instance) -> (EfficiencyBound, Vec<EfficiencyBound>) {
     let mut bound = EfficiencyBound(0.0);
     let mut discard_bounds = vec![EfficiencyBound(0.0); instance.num_nodes_total()];

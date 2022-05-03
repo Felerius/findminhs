@@ -101,6 +101,7 @@ pub enum GreedyMode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct Settings {
     /// Use local search to improve the packing bound
     pub enable_local_search: bool,
@@ -140,6 +141,7 @@ pub struct Report {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[allow(clippy::module_name_repetitions)]
 pub struct IlpReductionReport {
     #[serde(serialize_with = "serialize_duration_as_seconds")]
     pub runtime: Duration,

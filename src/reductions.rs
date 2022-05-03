@@ -53,7 +53,7 @@ pub struct Reduction(Vec<ReducedItem>);
 impl Reduction {
     pub fn restore(&self, instance: &mut Instance, partial_hs: &mut Vec<NodeIdx>) {
         for item in self.0.iter().rev() {
-            item.restore(instance, partial_hs)
+            item.restore(instance, partial_hs);
         }
     }
 }
@@ -269,6 +269,7 @@ fn run_reduction<I>(
     *item_counter += reduced_items.len() - len_before;
 }
 
+#[allow(clippy::too_many_lines)]
 pub fn reduce(
     instance: &mut Instance,
     state: &mut State,
