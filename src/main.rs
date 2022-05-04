@@ -2,7 +2,7 @@
 #![allow(clippy::similar_names, clippy::cast_possible_truncation)]
 use crate::{instance::Instance, report::IlpReductionReport};
 use anyhow::{anyhow, Result};
-use log::info;
+use log::{debug, info};
 use std::{
     ffi::OsStr,
     fs::File,
@@ -54,6 +54,10 @@ struct SolveOpts {
     #[structopt(parse(from_os_str))]
     settings: PathBuf,
 
+    /// File to optionally write the final hitting set to, formatted as a JSON array
+    #[structopt(short, long, parse(from_os_str))]
+    solution: Option<PathBuf>,
+
     /// File to write an optional, JSON-formatted report into
     #[structopt(short, long, parse(from_os_str))]
     report: Option<PathBuf>,
@@ -76,10 +80,16 @@ fn solve(opts: SolveOpts) -> Result<()> {
     };
 
     info!("Solving {:?}", &opts.hypergraph);
-    let report = solve::solve(instance, file_name, settings);
+    let (final_hs, report) = solve::solve(instance, file_name, settings);
     info!("Smallest HS has size {}", report.opt);
 
+    if let Some(solution_file) = opts.solution {
+        debug!("Writing solution to {}", solution_file.display());
+        let writer = BufWriter::new(File::create(&solution_file)?);
+        serde_json::to_writer(writer, &final_hs)?;
+    }
     if let Some(report_file) = opts.report {
+        debug!("Writing report to {}", report_file.display());
         let writer = BufWriter::new(File::create(&report_file)?);
         serde_json::to_writer(writer, &report)?;
     }

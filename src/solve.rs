@@ -80,7 +80,11 @@ fn solve_recursive(instance: &mut Instance, state: &mut State, report: &mut Repo
     reduction.restore(instance, &mut state.partial_hs);
 }
 
-pub fn solve(mut instance: Instance, file_name: String, settings: Settings) -> Report {
+pub fn solve(
+    mut instance: Instance,
+    file_name: String,
+    settings: Settings,
+) -> (Vec<NodeIdx>, Report) {
     let num_nodes = instance.num_nodes_total();
     let root_packing = PackingBound::new(&instance, &settings);
     let root_bounds = RootBounds {
@@ -124,11 +128,7 @@ pub fn solve(mut instance: Instance, file_name: String, settings: Settings) -> R
         "Solving took {} branching steps in {:.2?}",
         report.branching_steps, report.runtimes.total
     );
-    debug!(
-        "Final HS (size {}): {:?}",
-        state.minimum_hs.len(),
-        &state.minimum_hs
-    );
+    debug!("Final HS (size {}): {:?}", report.opt, &state.minimum_hs);
 
     info!("Validating found hitting set");
     let hs_set: IdxHashSet<_> = state.minimum_hs.iter().copied().collect();
@@ -139,5 +139,5 @@ pub fn solve(mut instance: Instance, file_name: String, settings: Settings) -> R
         assert!(hit, "edge {} not hit", edge);
     }
 
-    report
+    (state.minimum_hs, report)
 }
