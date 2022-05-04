@@ -10,7 +10,7 @@ use std::{
     path::PathBuf,
     time::Instant,
 };
-use structopt::StructOpt;
+use structopt::{clap::AppSettings, StructOpt};
 
 mod data_structures;
 mod instance;
@@ -20,19 +20,28 @@ mod report;
 mod small_indices;
 mod solve;
 
+const APP_SETTINGS: &[AppSettings] = &[
+    AppSettings::DisableHelpSubcommand,
+    AppSettings::SubcommandRequiredElseHelp,
+    AppSettings::VersionlessSubcommands,
+];
+const GLOBAL_APP_SETTINGS: &[AppSettings] =
+    &[AppSettings::ColoredHelp, AppSettings::UnifiedHelpMessage];
+
 #[derive(Debug, StructOpt)]
+#[structopt(settings = APP_SETTINGS, global_settings = GLOBAL_APP_SETTINGS)]
 enum CliOpts {
-    /// Solve a given instance using the solver
+    /// Run the solver on a given hypergraph
     Solve(SolveOpts),
 
-    /// Convert a given instance into an equivalent ILP
+    /// Convert a hypergraph into an equivalent ILP
     Ilp(IlpOpts),
 }
 
 #[derive(Debug, StructOpt)]
 struct IlpOpts {
-    /// Input hypergraph file to convert
-    #[structopt(parse(from_os_str))]
+    /// Hypergraph to convert
+    #[structopt(parse(from_os_str), value_name = "hypergraph-file")]
     hypergraph: PathBuf,
 
     /// Reduce the hypergraph first by applying vertex and edge domination rules
@@ -40,26 +49,32 @@ struct IlpOpts {
     reduced: bool,
 
     /// Write a json report about the applied reductions to this file
-    #[structopt(long, parse(from_os_str), requires("reduced"))]
+    #[structopt(
+        short,
+        long,
+        parse(from_os_str),
+        requires("reduced"),
+        value_name = "file"
+    )]
     report: Option<PathBuf>,
 }
 
 #[derive(Debug, StructOpt)]
 struct SolveOpts {
     /// Hypergraph to solve
-    #[structopt(parse(from_os_str))]
+    #[structopt(parse(from_os_str), value_name = "hypergraph-file")]
     hypergraph: PathBuf,
 
-    /// File containing solver settings
-    #[structopt(parse(from_os_str))]
+    /// Solver settings
+    #[structopt(parse(from_os_str), value_name = "settings-file")]
     settings: PathBuf,
 
-    /// File to optionally write the final hitting set to, formatted as a JSON array
-    #[structopt(short, long, parse(from_os_str))]
+    /// Write the final hitting set to this file as a json array
+    #[structopt(short, long, parse(from_os_str), value_name = "file")]
     solution: Option<PathBuf>,
 
-    /// File to write an optional, JSON-formatted report into
-    #[structopt(short, long, parse(from_os_str))]
+    /// Write a detailed statistics report to this file formatted as json
+    #[structopt(short, long, parse(from_os_str), value_name = "file")]
     report: Option<PathBuf>,
 }
 
