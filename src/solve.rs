@@ -118,6 +118,7 @@ fn is_hitting_set(hs: &[NodeIdx], instance: &Instance) -> bool {
 
 fn get_initial_hitting_set(instance: &Instance, settings: &Settings) -> Result<Vec<NodeIdx>> {
     if let Some(initial_hs) = &settings.initial_hitting_set {
+        info!("Using initial hitting set from settings");
         debug!("Validating initial hitting set from settings");
         for &node in initial_hs {
             ensure!(
