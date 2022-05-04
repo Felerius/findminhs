@@ -60,8 +60,22 @@ impl Reduction {
 
 #[derive(Debug, Clone)]
 pub enum ReductionResult {
+    /// The instance was fully solved through reductions.
+    ///
+    /// The current partial hitting set is now a valid hitting set and should
+    /// be compared to the current minimum hitting set.
     Solved,
+
+    /// There exists no smaller hitting set than the current minimum hitting set.
+    ///
+    /// This occurs when a lower bound meets or exceeds the size of the current
+    /// minimum hitting set (the upper bound).
     Unsolvable,
+
+    /// A minimum hitting set smaller or equal to the stopping size was found.
+    Stop,
+
+    /// No further progress can be made using reductions.
     Finished,
 }
 
@@ -275,12 +289,14 @@ pub fn reduce(
     state: &mut State,
     report: &mut Report,
 ) -> (ReductionResult, Reduction) {
-    let mut reduced_items = Vec::new();
-
     if report.settings.greedy_mode == GreedyMode::Once {
         recalculate_greedy_upper_bound(instance, state, report);
+        if state.minimum_hs.len() <= report.settings.stop_at {
+            return (ReductionResult::Stop, Reduction(vec![]));
+        }
     }
 
+    let mut reduced_items = Vec::new();
     let result = loop {
         if state.partial_hs.len() >= state.minimum_hs.len() {
             break ReductionResult::Unsolvable;
@@ -292,6 +308,9 @@ pub fn reduce(
 
         if report.settings.greedy_mode == GreedyMode::AlwaysBeforeBounds {
             recalculate_greedy_upper_bound(instance, state, report);
+            if state.minimum_hs.len() <= report.settings.stop_at {
+                break ReductionResult::Stop;
+            }
             if state.partial_hs.len() >= state.minimum_hs.len() {
                 break ReductionResult::Unsolvable;
             }
@@ -408,6 +427,9 @@ pub fn reduce(
             && report.settings.greedy_mode == GreedyMode::AlwaysBeforeExpensiveReductions
         {
             recalculate_greedy_upper_bound(instance, state, report);
+            if state.minimum_hs.len() <= report.settings.stop_at {
+                break ReductionResult::Stop;
+            }
             if state.partial_hs.len() >= state.minimum_hs.len() {
                 break ReductionResult::Unsolvable;
             }

@@ -142,6 +142,10 @@ pub struct Settings {
 
     /// Hitting set to initialize the solver with
     pub initial_hitting_set: Option<Vec<NodeIdx>>,
+
+    /// Stop solving once a hitting set this size or smaller is found
+    #[serde(default)]
+    pub stop_at: usize,
 }
 
 #[derive(Debug, Clone, Serialize)]

@@ -19,24 +19,43 @@ pub struct State {
     pub last_log_time: Instant,
 }
 
-fn branch_on(node: NodeIdx, instance: &mut Instance, state: &mut State, report: &mut Report) {
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum Status {
+    /// Continue solving to search for smaller hitting sets
+    Continue,
+
+    /// A hitting set smaller or equal to the stopping size has been found
+    Stop,
+}
+
+fn branch_on(
+    node: NodeIdx,
+    instance: &mut Instance,
+    state: &mut State,
+    report: &mut Report,
+) -> Status {
     trace!("Branching on {}", node);
     report.branching_steps += 1;
     instance.delete_node(node);
 
     instance.delete_incident_edges(node);
     state.partial_hs.push(node);
-    solve_recursive(instance, state, report);
+    let status_without = solve_recursive(instance, state, report);
     debug_assert_eq!(state.partial_hs.last().copied(), Some(node));
     state.partial_hs.pop();
     instance.restore_incident_edges(node);
 
-    solve_recursive(instance, state, report);
+    if status_without == Status::Stop {
+        instance.restore_node(node);
+        return Status::Stop;
+    }
 
+    let status_with = solve_recursive(instance, state, report);
     instance.restore_node(node);
+    status_with
 }
 
-fn solve_recursive(instance: &mut Instance, state: &mut State, report: &mut Report) {
+fn solve_recursive(instance: &mut Instance, state: &mut State, report: &mut Report) -> Status {
     let now = Instant::now();
     if (now - state.last_log_time).as_secs() >= ITERATION_LOG_INTERVAL_SECS {
         info!(
@@ -47,7 +66,7 @@ fn solve_recursive(instance: &mut Instance, state: &mut State, report: &mut Repo
     }
 
     let (reduction_result, reduction) = reductions::reduce(instance, state, report);
-    match reduction_result {
+    let status = match reduction_result {
         ReductionResult::Solved => {
             if state.partial_hs.len() < state.minimum_hs.len() {
                 info!("Found HS of size {} by branching", state.partial_hs.len());
@@ -65,8 +84,15 @@ fn solve_recursive(instance: &mut Instance, state: &mut State, report: &mut Repo
                     state.minimum_hs.len(),
                 );
             }
+
+            if state.minimum_hs.len() <= report.settings.stop_at {
+                Status::Stop
+            } else {
+                Status::Continue
+            }
         }
-        ReductionResult::Unsolvable => {}
+        ReductionResult::Unsolvable => Status::Continue,
+        ReductionResult::Stop => Status::Stop,
         ReductionResult::Finished => {
             let node = instance
                 .nodes()
@@ -74,11 +100,12 @@ fn solve_recursive(instance: &mut Instance, state: &mut State, report: &mut Repo
                 .copied()
                 .max_by_key(|&node| instance.node_degree(node))
                 .expect("Branching on an empty instance");
-            branch_on(node, instance, state, report);
+            branch_on(node, instance, state, report)
         }
-    }
+    };
 
     reduction.restore(instance, &mut state.partial_hs);
+    status
 }
 
 fn is_hitting_set(hs: &[NodeIdx], instance: &Instance) -> bool {
@@ -151,20 +178,27 @@ pub fn solve(
         last_log_time: Instant::now(),
         solve_start_time: Instant::now(),
     };
-    solve_recursive(&mut instance, &mut state, &mut report);
+    let status = solve_recursive(&mut instance, &mut state, &mut report);
     report.runtimes.total = state.solve_start_time.elapsed();
     report.opt = state.minimum_hs.len();
-
-    info!(
-        "Solving took {} branching steps in {:.2?}",
-        report.branching_steps, report.runtimes.total
-    );
-    debug!("Final HS (size {}): {:?}", report.opt, &state.minimum_hs);
 
     info!("Validating found hitting set");
     assert_eq!(instance.num_nodes_total(), instance.nodes().len());
     assert_eq!(instance.num_edges_total(), instance.edges().len());
     assert!(is_hitting_set(&state.minimum_hs, &instance));
+
+    if status == Status::Continue {
+        info!(
+            "Found minimum hitting set in {:.2?} and {} branching steps",
+            report.runtimes.total, report.branching_steps
+        );
+    } else {
+        info!(
+            "Found hitting set <= {} in {:.2?} and {} branching steps",
+            report.settings.stop_at, report.runtimes.total, report.branching_steps
+        );
+    }
+    debug!("Final HS (size {}): {:?}", report.opt, &state.minimum_hs);
 
     Ok((state.minimum_hs, report))
 }
