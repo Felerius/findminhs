@@ -1,5 +1,5 @@
 use rustc_hash::{FxHashMap, FxHashSet};
-use serde::Serialize;
+use serde::{de::DeserializeOwned, Serialize};
 use std::{
     fmt::{Debug, Display},
     hash::Hash,
@@ -18,6 +18,7 @@ pub trait SmallIdx:
     + From<usize>
     + From<u32>
     + Serialize
+    + DeserializeOwned
 {
     const INVALID: Self;
 
@@ -42,7 +43,19 @@ pub trait SmallIdx:
 #[macro_export]
 macro_rules! create_idx_struct {
     ($vis:vis $name:ident) => {
-        #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
+        #[derive(
+            Copy,
+            Clone,
+            Debug,
+            Hash,
+            Eq,
+            PartialEq,
+            Ord,
+            PartialOrd,
+            ::serde::Serialize,
+            ::serde::Deserialize,
+        )]
+        #[serde(transparent)]
         $vis struct $name(u32);
 
         impl $crate::small_indices::SmallIdx for $name {
@@ -90,15 +103,6 @@ macro_rules! create_idx_struct {
             fn default() -> Self {
                 use $crate::small_indices::SmallIdx;
                 Self::INVALID
-            }
-        }
-
-        impl ::serde::Serialize for $name {
-            fn serialize<S>(&self, serializer: S) -> ::std::result::Result<S::Ok, S::Error>
-            where
-                S: ::serde::Serializer,
-            {
-                serializer.serialize_u32(self.0)
             }
         }
     };

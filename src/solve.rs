@@ -3,8 +3,9 @@ use crate::{
     lower_bound::{self, PackingBound},
     reductions::{self, ReductionResult},
     report::{ReductionStats, Report, RootBounds, RuntimeStats, Settings, UpperBoundImprovement},
-    small_indices::IdxHashSet,
+    small_indices::{IdxHashSet, SmallIdx},
 };
+use anyhow::{ensure, Result};
 use log::{debug, info, trace, warn};
 use std::time::Instant;
 
@@ -80,43 +81,73 @@ fn solve_recursive(instance: &mut Instance, state: &mut State, report: &mut Repo
     reduction.restore(instance, &mut state.partial_hs);
 }
 
-pub fn solve(
-    mut instance: Instance,
-    file_name: String,
-    settings: Settings,
-) -> (Vec<NodeIdx>, Report) {
+fn is_hitting_set(hs: &[NodeIdx], instance: &Instance) -> bool {
+    let hs_set: IdxHashSet<_> = hs.iter().copied().collect();
+    instance
+        .edges()
+        .iter()
+        .all(|&edge| instance.edge(edge).any(|node| hs_set.contains(&node)))
+}
+
+fn get_initial_hitting_set(instance: &Instance, settings: &Settings) -> Result<Vec<NodeIdx>> {
+    if let Some(initial_hs) = &settings.initial_hitting_set {
+        debug!("Validating initial hitting set from settings");
+        for &node in initial_hs {
+            ensure!(
+                node.idx() < instance.num_nodes_total(),
+                "node index {} out of bounds in initial hitting set",
+                node
+            );
+        }
+        ensure!(
+            is_hitting_set(initial_hs, instance),
+            "initial hitting set is not valid"
+        );
+
+        Ok(initial_hs.clone())
+    } else {
+        Ok(instance.nodes().to_vec())
+    }
+}
+
+fn calculate_root_bounds(instance: &Instance, settings: &Settings) -> RootBounds {
     let num_nodes = instance.num_nodes_total();
-    let root_packing = PackingBound::new(&instance, &settings);
-    let root_bounds = RootBounds {
-        max_degree: lower_bound::calc_max_degree_bound(&instance).unwrap_or(num_nodes),
-        sum_degree: lower_bound::calc_sum_degree_bound(&instance),
-        efficiency: lower_bound::calc_efficiency_bound(&instance)
+    let root_packing = PackingBound::new(instance, settings);
+    RootBounds {
+        max_degree: lower_bound::calc_max_degree_bound(instance).unwrap_or(num_nodes),
+        sum_degree: lower_bound::calc_sum_degree_bound(instance),
+        efficiency: lower_bound::calc_efficiency_bound(instance)
             .0
             .round()
             .unwrap_or(num_nodes),
         packing: root_packing.bound(),
-        sum_over_packing: root_packing.calc_sum_over_packing_bound(&instance),
-        greedy_upper: reductions::calc_greedy_approximation(&instance).len(),
-    };
+        sum_over_packing: root_packing.calc_sum_over_packing_bound(instance),
+        greedy_upper: reductions::calc_greedy_approximation(instance).len(),
+    }
+}
+
+pub fn solve(
+    mut instance: Instance,
+    file_name: String,
+    settings: Settings,
+) -> Result<(Vec<NodeIdx>, Report)> {
+    let initial_hs = get_initial_hitting_set(&instance, &settings)?;
+    let root_bounds = calculate_root_bounds(&instance, &settings);
     let packing_from_scratch_limit = settings.packing_from_scratch_limit;
     let mut report = Report {
         file_name,
-        opt: instance.num_nodes_total(),
+        opt: initial_hs.len(),
         branching_steps: 0,
         settings,
         root_bounds,
         runtimes: RuntimeStats::default(),
-        reductions: ReductionStats::default(),
+        reductions: ReductionStats::new(packing_from_scratch_limit),
         upper_bound_improvements: Vec::new(),
     };
-    report
-        .reductions
-        .costly_discard_packing_from_scratch_steps_per_run =
-        vec![0; packing_from_scratch_limit + 1];
 
     let mut state = State {
         partial_hs: Vec::new(),
-        minimum_hs: instance.nodes().to_vec(),
+        minimum_hs: initial_hs,
         last_log_time: Instant::now(),
         solve_start_time: Instant::now(),
     };
@@ -131,13 +162,9 @@ pub fn solve(
     debug!("Final HS (size {}): {:?}", report.opt, &state.minimum_hs);
 
     info!("Validating found hitting set");
-    let hs_set: IdxHashSet<_> = state.minimum_hs.iter().copied().collect();
     assert_eq!(instance.num_nodes_total(), instance.nodes().len());
     assert_eq!(instance.num_edges_total(), instance.edges().len());
-    for &edge in instance.edges() {
-        let hit = instance.edge(edge).any(|node| hs_set.contains(&node));
-        assert!(hit, "edge {} not hit", edge);
-    }
+    assert!(is_hitting_set(&state.minimum_hs, &instance));
 
-    (state.minimum_hs, report)
+    Ok((state.minimum_hs, report))
 }

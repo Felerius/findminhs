@@ -1,3 +1,4 @@
+use crate::instance::NodeIdx;
 use serde::{Deserialize, Serialize, Serializer};
 use std::time::Duration;
 
@@ -82,6 +83,18 @@ pub struct ReductionStats {
     pub edge_dominations_edges_found: usize,
 }
 
+impl ReductionStats {
+    pub fn new(packing_from_scratch_limit: usize) -> Self {
+        Self {
+            costly_discard_packing_from_scratch_steps_per_run: vec![
+                0;
+                packing_from_scratch_limit + 1
+            ],
+            ..Self::default()
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct RootBounds {
     pub max_degree: usize,
@@ -126,6 +139,9 @@ pub struct Settings {
 
     /// When to update the greedy upper bound during reductions
     pub greedy_mode: GreedyMode,
+
+    /// Hitting set to initialize the solver with
+    pub initial_hitting_set: Option<Vec<NodeIdx>>,
 }
 
 #[derive(Debug, Clone, Serialize)]

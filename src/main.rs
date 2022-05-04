@@ -80,7 +80,7 @@ fn solve(opts: SolveOpts) -> Result<()> {
     };
 
     info!("Solving {:?}", &opts.hypergraph);
-    let (final_hs, report) = solve::solve(instance, file_name, settings);
+    let (final_hs, report) = solve::solve(instance, file_name, settings)?;
     info!("Smallest HS has size {}", report.opt);
 
     if let Some(solution_file) = opts.solution {
