@@ -39,10 +39,31 @@ enum CliOpts {
 }
 
 #[derive(Debug, StructOpt)]
-struct IlpOpts {
-    /// Hypergraph to convert
+struct CommonOpts {
+    /// Input hypergraph
     #[structopt(parse(from_os_str), value_name = "hypergraph-file")]
     hypergraph: PathBuf,
+
+    /// Use the json format for the input hypergraph rather than the text-based one.
+    #[structopt(short, long)]
+    json: bool,
+}
+
+impl CommonOpts {
+    fn load_instance(&self) -> Result<Instance> {
+        let reader = BufReader::new(File::open(&self.hypergraph)?);
+        if self.json {
+            Instance::load_from_json(reader)
+        } else {
+            Instance::load_from_text(reader)
+        }
+    }
+}
+
+#[derive(Debug, StructOpt)]
+struct IlpOpts {
+    #[structopt(flatten)]
+    common: CommonOpts,
 
     /// Reduce the hypergraph first by applying vertex and edge domination rules
     #[structopt(long)]
@@ -61,9 +82,8 @@ struct IlpOpts {
 
 #[derive(Debug, StructOpt)]
 struct SolveOpts {
-    /// Hypergraph to solve
-    #[structopt(parse(from_os_str), value_name = "hypergraph-file")]
-    hypergraph: PathBuf,
+    #[structopt(flatten)]
+    common: CommonOpts,
 
     /// Solver settings
     #[structopt(parse(from_os_str), value_name = "settings-file")]
@@ -80,21 +100,19 @@ struct SolveOpts {
 
 fn solve(opts: SolveOpts) -> Result<()> {
     let file_name = opts
+        .common
         .hypergraph
         .file_name()
         .and_then(OsStr::to_str)
         .ok_or_else(|| anyhow!("File name can't be extracted"))?
         .to_string();
-    let instance = {
-        let reader = BufReader::new(File::open(&opts.hypergraph)?);
-        Instance::load(reader)?
-    };
+    let instance = opts.common.load_instance()?;
     let settings = {
         let reader = BufReader::new(File::open(&opts.settings)?);
         serde_json::from_reader(reader)?
     };
 
-    info!("Solving {:?}", &opts.hypergraph);
+    info!("Solving {:?}", &opts.common.hypergraph);
     let (final_hs, report) = solve::solve(instance, file_name, settings)?;
 
     if let Some(solution_file) = opts.solution {
@@ -112,8 +130,7 @@ fn solve(opts: SolveOpts) -> Result<()> {
 }
 
 fn convert_to_ilp(opts: IlpOpts) -> Result<()> {
-    let reader = BufReader::new(File::open(&opts.hypergraph)?);
-    let mut instance = Instance::load(reader)?;
+    let mut instance = opts.common.load_instance()?;
 
     if opts.reduced {
         let time_before = Instant::now();

@@ -3,8 +3,9 @@ use crate::{
     data_structures::{cont_idx_vec::ContiguousIdxVec, skipvec::SkipVec},
     small_indices::SmallIdx,
 };
-use anyhow::{anyhow, ensure, Result};
+use anyhow::{anyhow, ensure, Error, Result};
 use log::{info, trace};
+use serde::Deserialize;
 use std::{
     fmt::{self, Display, Write as _},
     io::{BufRead, Write},
@@ -16,6 +17,7 @@ create_idx_struct!(pub NodeIdx);
 create_idx_struct!(pub EdgeIdx);
 create_idx_struct!(pub EntryIdx);
 
+#[derive(Debug)]
 struct CompressedIlpName<T>(T);
 
 impl<T: SmallIdx> Display for CompressedIlpName<T> {
@@ -30,6 +32,39 @@ impl<T: SmallIdx> Display for CompressedIlpName<T> {
     }
 }
 
+#[derive(Debug)]
+struct ParsedEdgeHandler {
+    edge_incidences: Vec<SkipVec<(NodeIdx, EntryIdx)>>,
+    node_degrees: Vec<usize>,
+}
+
+impl ParsedEdgeHandler {
+    fn handle_edge(&mut self, node_indices: impl IntoIterator<Item = Result<usize>>) -> Result<()> {
+        let incidences = SkipVec::try_sorted_from(node_indices.into_iter().map(|idx_result| {
+            idx_result.and_then(|node_idx| {
+                ensure!(
+                    node_idx < self.node_degrees.len(),
+                    "invalid node idx in edge: {}",
+                    node_idx
+                );
+                Ok((NodeIdx::from(node_idx), EntryIdx::INVALID))
+            })
+        }))?;
+        ensure!(incidences.len() > 0, "edges may not be empty");
+        for (_, (node, _)) in &incidences {
+            self.node_degrees[node.idx()] += 1;
+        }
+        self.edge_incidences.push(incidences);
+        Ok(())
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct JsonInstance {
+    num_nodes: usize,
+    edges: Vec<Vec<usize>>,
+}
+
 #[derive(Clone, Debug)]
 pub struct Instance {
     nodes: ContiguousIdxVec<NodeIdx>,
@@ -39,46 +74,20 @@ pub struct Instance {
 }
 
 impl Instance {
-    pub fn load(mut reader: impl BufRead) -> Result<Self> {
-        let time_before = Instant::now();
-        let mut line = String::new();
-
-        reader.read_line(&mut line)?;
-        let mut numbers = line.split_ascii_whitespace().map(str::parse);
-        let num_nodes = numbers
-            .next()
-            .ok_or_else(|| anyhow!("Missing node count"))??;
-        let num_edges = numbers
-            .next()
-            .ok_or_else(|| anyhow!("Missing edge count"))??;
-        ensure!(
-            numbers.next().is_none(),
-            "Too many numbers in first input line"
-        );
-
-        let nodes = (0..num_nodes).map(NodeIdx::from).collect();
-        let edges = (0..num_edges).map(EdgeIdx::from).collect();
-
-        let mut edge_incidences = Vec::with_capacity(num_edges);
-        let mut node_degrees = vec![0; num_nodes];
-        for _ in 0..num_edges {
-            line.clear();
-            reader.read_line(&mut line)?;
-            let mut numbers = line.split_ascii_whitespace().map(str::parse::<usize>);
-            let degree = numbers
-                .next()
-                .ok_or_else(|| anyhow!("empty edge line in input, expected degree"))??;
-            ensure!(degree > 0, "edges may not be empty");
-
-            let incidences =
-                SkipVec::try_sorted_from(numbers.map(|num_result| {
-                    num_result.map(|num| (NodeIdx::from(num), EntryIdx::INVALID))
-                }))?;
-            for (_, (node, _)) in &incidences {
-                node_degrees[node.idx()] += 1;
-            }
-            edge_incidences.push(incidences);
-        }
+    fn load(
+        num_nodes: usize,
+        num_edges: usize,
+        read_edges: impl FnOnce(&mut ParsedEdgeHandler) -> Result<()>,
+    ) -> Result<Self> {
+        let mut handler = ParsedEdgeHandler {
+            edge_incidences: Vec::with_capacity(num_edges),
+            node_degrees: vec![0; num_nodes],
+        };
+        read_edges(&mut handler)?;
+        let ParsedEdgeHandler {
+            mut edge_incidences,
+            node_degrees,
+        } = handler;
 
         let mut node_incidences: Vec<_> = node_degrees
             .iter()
@@ -96,18 +105,80 @@ impl Instance {
             }
         }
 
-        info!(
-            "Loaded instance with {} nodes, {} edges in {:.2?}",
-            num_nodes,
-            num_edges,
-            Instant::now() - time_before,
-        );
         Ok(Self {
-            nodes,
-            edges,
+            nodes: (0..num_nodes).map(NodeIdx::from).collect(),
+            edges: (0..num_edges).map(EdgeIdx::from).collect(),
             node_incidences,
             edge_incidences,
         })
+    }
+
+    pub fn load_from_text(mut reader: impl BufRead) -> Result<Self> {
+        let time_before = Instant::now();
+        let mut line = String::new();
+
+        reader.read_line(&mut line)?;
+        let mut numbers = line.split_ascii_whitespace().map(str::parse);
+        let num_nodes = numbers
+            .next()
+            .ok_or_else(|| anyhow!("Missing node count"))??;
+        let num_edges = numbers
+            .next()
+            .ok_or_else(|| anyhow!("Missing edge count"))??;
+        ensure!(
+            numbers.next().is_none(),
+            "Too many numbers in first input line"
+        );
+
+        let instance = Self::load(num_nodes, num_edges, |handler| {
+            for _ in 0..num_edges {
+                line.clear();
+                reader.read_line(&mut line)?;
+                let mut numbers = line
+                    .split_ascii_whitespace()
+                    .map(|s| s.parse::<usize>().map_err(Error::from));
+                // Skip degree
+                numbers
+                    .next()
+                    .ok_or_else(|| anyhow!("empty edge line in input, expected degree"))??;
+                handler.handle_edge(numbers)?;
+            }
+
+            Ok(())
+        })?;
+
+        info!(
+            "Loaded text instance with {} nodes, {} edges in {:.2?}",
+            num_nodes,
+            num_edges,
+            time_before.elapsed(),
+        );
+        Ok(instance)
+    }
+
+    pub fn load_from_json(mut reader: impl BufRead) -> Result<Self> {
+        let time_before = Instant::now();
+
+        // Usually faster for large inputs, see https://github.com/serde-rs/json/issues/160
+        let mut text = String::new();
+        reader.read_to_string(&mut text)?;
+        let JsonInstance { num_nodes, edges } = serde_json::from_str(&text)?;
+
+        let num_edges = edges.len();
+        let instance = Self::load(num_nodes, num_edges, |handler| {
+            for edge in edges {
+                handler.handle_edge(edge.into_iter().map(Ok))?;
+            }
+            Ok(())
+        })?;
+
+        info!(
+            "Loaded json instance with {} nodes, {} edges in {:.2?}",
+            num_nodes,
+            num_edges,
+            time_before.elapsed(),
+        );
+        Ok(instance)
     }
 
     pub fn num_edges(&self) -> usize {
