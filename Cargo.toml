@@ -2,7 +2,7 @@
 name = "findminhs"
 version = "0.1.0"
 authors = ["David Stangl <david.stangl@student.hpi.de>"]
-edition = "2018"
+edition = "2021"
 
 [features]
 debug-skipvec = []
