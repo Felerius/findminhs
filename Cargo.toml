@@ -1,8 +1,17 @@
 [package]
 name = "findminhs"
-version = "0.1.0"
-authors = ["David Stangl <david.stangl@student.hpi.de>"]
+version = "2.1.0"
+authors = ["David Stangl <david@david-stangl.com>"]
 edition = "2021"
+license = "MIT"
+description = "An efficient branch-and-bound solver for hitting set"
+homepage = "https://github.com/Felerius/findminhs"
+repository = "https://github.com/Felerius/findminhs"
+documentation = "https://github.com/Felerius/findminhs"
+readme = "README.md"
+categories = ["command-line-utilities", "science"]
+keywords = ["hitting-set", "solver", "research"]
+exclude = ["evaluation/*"]
 
 [features]
 debug-skipvec = []
@@ -12,7 +21,6 @@ anyhow = "1.0"
 derivative = "2.1"
 env_logger = "0.9"
 log = { version = "0.4", features = ["max_level_debug", "release_max_level_info"] }
-# log = { version = "0.4", features = ["release_max_level_debug"] }
 rustc-hash = "1.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
