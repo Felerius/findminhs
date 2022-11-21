@@ -1,0 +1,10 @@
+{
+    "enable_local_search": false,
+    "enable_max_degree_bound": true,
+    "enable_sum_degree_bound": false,
+    "enable_efficiency_bound": true,
+    "enable_packing_bound": true,
+    "enable_sum_over_packing_bound": true,
+    "packing_from_scratch_limit": 3,
+    "greedy_mode": "Once"
+}
